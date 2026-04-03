@@ -1,4 +1,4 @@
-import { APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini } from './firebase-config.js?v=74';
+import { APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini } from './firebase-config.js?v=741';
 
 export function dirHome(){
   const pending=(APP.subRequests||[]).filter(r=>r.status==='pending').length;
@@ -178,8 +178,25 @@ export function dirTimecards(){
       <button class="btn" onclick="window.K.exportTimecards()">⬇ Export CSV</button>
     </div>
   </div>
+  ${all.filter(t=>t.status==='active').length>0?`
+  <div style="background:linear-gradient(135deg,#0A2A0A,#0D3A0D);border:1px solid rgba(94,200,94,0.3);border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(94,200,94,0.6);margin-bottom:10px;display:flex;align-items:center;gap:6px;"><div style="width:6px;height:6px;border-radius:50%;background:#5EC85E;animation:pulse 2s infinite;"></div>Currently Clocked In</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      ${all.filter(t=>t.status==='active').map(t=>{
+        const ci=t.clockIn?new Date(t.clockIn):'';
+        const nowMs=Date.now();const diffMs=ci?nowMs-ci.getTime():0;
+        const diffMin=Math.floor(diffMs/60000);const h=Math.floor(diffMin/60),m=diffMin%60;
+        const dur=h>0?h+'h '+m+'m':m+'m';
+        return `<div style="display:flex;align-items:center;gap:10px;background:rgba(94,200,94,0.08);border:1px solid rgba(94,200,94,0.2);border-radius:8px;padding:9px 14px;">
+          <div class="mini-av">${ini(t.coachName||'?')}</div>
+          <div><div style="font-size:13px;font-weight:700;color:#FAFAF8;">${t.coachName||'Coach'}</div>
+          <div style="font-size:11px;color:rgba(94,200,94,0.7);">⏱ ${dur} — ${t.className||'General'}</div></div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`:''}
   <div class="stats4">
-    <div class="stat"><div class="sl">Pending</div><div class="sv gold">${all.filter(t=>t.status==='pending').length}</div></div>
+    <div class="stat"><div class="sl">Pending Approval</div><div class="sv gold">${all.filter(t=>t.status==='pending').length}</div></div>
     <div class="stat"><div class="sl">Today's Hours</div><div class="sv">${calcHours(all.filter(t=>t.clockIn>=now.toISOString().split('T')[0]))}</div></div>
     <div class="stat"><div class="sl">This Week</div><div class="sv gold">${calcHours(all.filter(t=>t.clockIn>=weekAgo))}</div></div>
     <div class="stat"><div class="sl">This Month</div><div class="sv">${calcHours(all.filter(t=>t.clockIn>=monthAgo))}</div></div>
@@ -237,10 +254,10 @@ export function dirMsgs(){
                        (m.fromRole==='coach'&&m.toId&&APP.allAthletes?.find(a=>a.parentEmail&&m.toId!==me));
 
   // My messages = anything sent TO me or BY me
-  const isMyMsg=m=>m.toId===me||m.fromId===me||m.toRole==='director';
+  const isMyMsg=m=>m.toId===me||m.fromId===me||m.toRole==='director'||m.toRole==='coaches'||m.toRole==='parents';
 
-  const myMsgs=all.filter(m=>!m.fromId==='system'&&isMyMsg(m)&&!isStaffMsg(m));
-  const staffMsgs=all.filter(m=>isStaffMsg(m));
+  const myMsgs=all.filter(m=>m.fromId!=='system'&&isMyMsg(m)&&!isStaffMsg(m));
+  const staffMsgs=all.filter(m=>isStaffMsg(m)&&m.fromId!=='system');
   const activeMsgs=folder==='staff'?staffMsgs:myMsgs;
 
   const unread=activeMsgs.filter(m=>!m.read&&m.fromId!==me&&m.fromId!=='system');

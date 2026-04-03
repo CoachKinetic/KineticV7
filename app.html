@@ -386,14 +386,14 @@ html,body{height:100%;font-family:'Barlow',sans-serif;background:var(--bg);color
 </div>
 
 <script type="module">
-import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=74';
+import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=741';
 window.APP=APP;
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { doc, setDoc, getDoc, collection, addDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=74';
-import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=74';
-import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=74';
+import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=741';
+import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=741';
+import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=741';
 
 const FIREBASE_CONFIG={apiKey:"AIzaSyCmG-MfINmp1rMQOsXGNmRkBxJROSdqyqk",authDomain:"kinetic-a4862.firebaseapp.com",projectId:"kinetic-a4862",storageBucket:"kinetic-a4862.firebasestorage.app",messagingSenderId:"924145283660",appId:"1:924145283660:web:f1135f7000d9e4897f7ae9"};
 
@@ -497,20 +497,23 @@ async function loadAll(){
   const gid=APP.gymId;
   if(!gid){APP.allClasses=[];APP.allAthletes=[];APP.archivedAthletes=[];APP.allCoaches=[];APP.allTimecards=[];APP.myTimecards=[];APP.subRequests=[];APP.allInjuries=[];APP.messages=[];APP.coachConcerns=[];return;}
   try{
-    const [clsS,athS,coaS,tcS,subS,injS,msgS,noteS]=await Promise.all([
+    const results=await Promise.allSettled([
       getDocs(query(collection(db,'classes'),where('gymId','==',gid))),
       getDocs(query(collection(db,'athletes'),where('gymId','==',gid))),
-      getDocs(query(collection(db,'users'),where('gymId','==',gid),where('role','==','coach'))),
+      getDocs(query(collection(db,'users'),where('gymId','==',gid))),
       getDocs(query(collection(db,'timecards'),where('gymId','==',gid))),
       getDocs(query(collection(db,'subRequests'),where('gymId','==',gid))),
       getDocs(query(collection(db,'injuries'),where('gymId','==',gid))),
       getDocs(query(collection(db,'messages'),where('gymId','==',gid))),
       getDocs(query(collection(db,'notes'),where('gymId','==',gid))),
     ]);
+    const safe=(i)=>results[i].status==='fulfilled'?results[i].value:{docs:[]};
+    const [clsS,athS,coaS,tcS,subS,injS,msgS,noteS]=[safe(0),safe(1),safe(2),safe(3),safe(4),safe(5),safe(6),safe(7)];
     APP.allClasses=clsS.docs.map(d=>({id:d.id,...d.data()}));
     const allAth=athS.docs.map(d=>({id:d.id,...d.data()}));
     APP.allAthletes=allAth.filter(a=>!a.archived);APP.archivedAthletes=allAth.filter(a=>a.archived);
-    APP.allCoaches=coaS.docs.map(d=>({id:d.id,...d.data()}));
+    const allUsers=coaS.docs.map(d=>({id:d.id,...d.data()}));
+    APP.allCoaches=allUsers.filter(c=>c.role==='coach');
     APP.allTimecards=tcS.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>new Date(b.clockIn||0)-new Date(a.clockIn||0));
     APP.subRequests=subS.docs.map(d=>({id:d.id,...d.data()}));
     APP.allInjuries=injS.docs.map(d=>({id:d.id,...d.data()}));
