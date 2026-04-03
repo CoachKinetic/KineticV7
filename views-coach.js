@@ -1,5 +1,5 @@
-import { APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini } from './firebase-config.js?v=742';
-import { msgInbox } from './views-director.js?v=742';
+import { APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini } from './firebase-config.js?v=743';
+import { msgInbox } from './views-director.js?v=743';
 
 // ── HELPERS ──────────────────────────────────────────────────────────────
 function timeToMin(t){if(!t)return0;const[h,m]=(t.match(/(\d+):(\d+)/)||[0,0,0]).slice(1).map(Number);const pm=t.includes('PM')&&h!==12;const am=t.includes('AM')&&h===12;return (pm?h+12:am?0:h)*60+m;}

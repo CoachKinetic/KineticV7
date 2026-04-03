@@ -1,5 +1,5 @@
-import { APP, SKILLS, BELT_COLORS, ini } from './firebase-config.js?v=742';
-import { msgInbox } from './views-director.js?v=742';
+import { APP, SKILLS, BELT_COLORS, ini } from './firebase-config.js?v=743';
+import { msgInbox } from './views-director.js?v=743';
 
 function switcher(idx, dest){
   const a=APP.parentAthletes||[];

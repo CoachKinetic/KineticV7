@@ -386,14 +386,14 @@ html,body{height:100%;font-family:'Barlow',sans-serif;background:var(--bg);color
 </div>
 
 <script type="module">
-import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=742';
+import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=743';
 window.APP=APP;
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { doc, setDoc, getDoc, collection, addDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=742';
-import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=742';
-import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=742';
+import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=743';
+import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=743';
+import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=743';
 
 const FIREBASE_CONFIG={apiKey:"AIzaSyCmG-MfINmp1rMQOsXGNmRkBxJROSdqyqk",authDomain:"kinetic-a4862.firebaseapp.com",projectId:"kinetic-a4862",storageBucket:"kinetic-a4862.firebasestorage.app",messagingSenderId:"924145283660",appId:"1:924145283660:web:f1135f7000d9e4897f7ae9"};
 
@@ -416,7 +416,26 @@ onAuthStateChanged(auth,async user=>{
     try{
       const snap=await getDoc(doc(db,'users',user.uid));
       if(snap.exists()){APP.profile={...APP.profile,...snap.data()};APP.role=APP.profile.role||'director';APP.gymId=APP.profile.gymId||null;break;}
-      else if(i===3){await setDoc(doc(db,'users',user.uid),{name:user.email.split('@')[0],email:user.email,role:'director',belt:'Foundation',certifications:[],createdAt:new Date().toISOString()});}
+      else if(i===3){
+        // Only auto-create profile for directors (coaches/parents are created by director)
+        // First check if this email is in invites (coach) or athletes (parent)
+        try{
+          const invSnap=await getDocs(query(collection(db,'invites'),where('email','==',user.email)));
+          if(!invSnap.empty){
+            const inv=invSnap.docs[0].data();
+            await setDoc(doc(db,'users',user.uid),{name:inv.name||user.email.split('@')[0],email:user.email,role:inv.role||'coach',belt:inv.belt||'Foundation',certifications:[],gymId:inv.gymId||null,gymName:inv.gymName||'',firstLogin:true,createdAt:new Date().toISOString()});
+            break;
+          }
+          const athSnap=await getDocs(query(collection(db,'athletes'),where('parentEmail','==',user.email)));
+          if(!athSnap.empty){
+            const gymId=athSnap.docs[0].data().gymId||null;
+            await setDoc(doc(db,'users',user.uid),{name:user.email.split('@')[0],email:user.email,role:'parent',belt:'',certifications:[],gymId,gymName:'',firstLogin:true,createdAt:new Date().toISOString()});
+            break;
+          }
+        }catch(e){}
+        // Default: director
+        await setDoc(doc(db,'users',user.uid),{name:user.email.split('@')[0],email:user.email,role:'director',belt:'Foundation',certifications:[],createdAt:new Date().toISOString()});
+      }
     }catch(e){console.warn(e);}
     if(i<3)await new Promise(r=>setTimeout(r,600));
   }
@@ -617,7 +636,12 @@ function render(){
     parentHome,parentSkills,parentTuition,parentMsgs,
   };
   if(v.startsWith('skill_')){c.innerHTML=skillDetail(v.replace('skill_',''));return;}
-  c.innerHTML=(views[v]?views[v]():`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;text-align:center;gap:14px;"><div style="font-size:44px;opacity:0.2;">🔒</div><h3 style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;">Coming Soon</h3></div>`);
+  try{
+    c.innerHTML=(views[v]?views[v]():`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;text-align:center;gap:14px;"><div style="font-size:44px;opacity:0.2;">🔒</div><h3 style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;">Coming Soon</h3></div>`);
+  }catch(err){
+    console.error('render error for',v,err);
+    c.innerHTML=`<div style="padding:40px;text-align:center;"><div style="font-size:40px;margin-bottom:12px;">⚠️</div><h3 style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;margin-bottom:8px;">Oops</h3><p style="color:var(--t2);font-size:13px;">${err.message}</p><button class="btn primary" style="margin-top:16px;" onclick="K.nav('${APP.role==='director'?'dirHome':APP.role==='coach'?'coachDash':'parentHome'}')">← Go Home</button></div>`;
+  }
   if(v==='coachDash'){startClock();if(APP.clockedIn)loadAI();}
   updateSimpleModeBar();
 }
@@ -647,44 +671,33 @@ async function loadAI(){
 
 // ─── PARENT DATA LOADER ───
 async function loadParentData(){
-  if(APP.role!=='parent')return;
+  if(APP.role!=='parent'||!APP.gymId)return;
+  // Load skill snapshots for parent's athletes
+  APP.parentSkillData=APP.parentSkillData||{};
+  APP.parentSkillUpdated=APP.parentSkillUpdated||{};
   try{
-    // Load skill data for each athlete
-    APP.parentSkillData=APP.parentSkillData||{};
-    APP.parentSkillUpdated=APP.parentSkillUpdated||{};
-    APP.parentAttData=APP.parentAttData||{};
+    const uid=APP.user?.uid;
+    // Find latest skills doc for each of parent's athletes
     for(const ath of (APP.parentAthletes||[])){
-      const athClasses=APP.allClasses.filter(c=>(c.athletes||[]).includes(ath.id));
-      // Load most recent skill snapshot for this athlete
-      for(const cls of athClasses){
-        // Query skills collection for this class
+      const myClasses=(APP.allClasses||[]).filter(c=>(c.athletes||[]).includes(ath.id));
+      for(const cls of myClasses){
         try{
-          const {getDocs:gd2,collection:col2,query:q2,where:w2,orderBy:ob2,limit:lim2}=await import("https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js");
-          // Get all skill docs for this class
-          const skillSnaps=await gd2(q2(col2(db,'skills'),w2('classId','==',cls.id),w2('gymId','==',APP.gymId||'_')));
-          let latestDate='';let latestState={};
-          skillSnaps.docs.forEach(d=>{
-            const data=d.data();
-            if(data.date>latestDate){latestDate=data.date;latestState=data.skills||{};}
-          });
-          // Map the skill state to this athlete's index in the class
+          // Query skills for this class - single where clause, no index needed
+          const snap=await getDocs(query(collection(db,'skills'),where('classId','==',cls.id)));
+          let latest='';let state={};
+          snap.docs.forEach(d=>{const dat=d.data();if((dat.date||'')>latest){latest=dat.date||'';state=dat.skills||{};}});
           const athIdx=(cls.athletes||[]).indexOf(ath.id);
-          if(athIdx>-1&&latestState[athIdx]){
+          if(athIdx>-1&&state[athIdx]){
             if(!APP.parentSkillData[ath.id])APP.parentSkillData[ath.id]={};
-            Object.assign(APP.parentSkillData[ath.id],latestState[athIdx]);
-            if(latestDate>=(APP.parentSkillUpdated[ath.id]||''))APP.parentSkillUpdated[ath.id]=latestDate;
+            Object.assign(APP.parentSkillData[ath.id],state[athIdx]);
+            APP.parentSkillUpdated[ath.id]=latest;
           }
-        }catch(e){}
-        // Load attendance for today
-        try{
-          const today=new Date().toISOString().split('T')[0];
-          const attSnap=await getDoc(doc(db,'attendance/'+today+'_'+cls.id));
-          if(attSnap.exists()){const d=attSnap.data();APP.parentAttData[ath.id]={present:(d.presentIds||[]).includes(ath.id),absent:(d.absentIds||[]).includes(ath.id),date:today};}
         }catch(e){}
       }
     }
   }catch(e){console.warn('loadParentData:',e);}
 }
+
 
 // ─── PRE-CLASS NOTIFICATIONS ───
 let _notifTimer=null;
