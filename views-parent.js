@@ -70,6 +70,9 @@ export function parentSkills(){
   const ath=aths[idx];
   if(!ath) return `<div class="alert info">No athlete linked yet.</div>`;
   const skills=SKILLS.filter(s=>s.level===(ath.level||'Level 1'));
+  // Find this athlete's index in their class for skill lookup
+  const athClasses=APP.allClasses?.filter(c=>(c.athletes||[]).includes(ath.id))||[];
+  const coachNames=athClasses.map(c=>c.coachName||'Your Coach').filter(Boolean).join(', ');
   const mastered=skills.filter(s=>s.def==='mastered').length;
   const evts=[...new Set(skills.map(s=>s.event))];
   return `
@@ -116,6 +119,18 @@ export function parentTuition(){
 }
 
 export function parentMsgs(){
-  const msgs=(APP.messages||[]).filter(m=>m.toId===APP.user?.uid||m.toRole==='parents'||m.fromId===APP.user?.uid);
-  return msgInbox(msgs,'parent');
+  const uid=APP.user?.uid;
+  const all=(APP.messages||[]).filter(m=>m.toId===uid||m.toRole==='parents'||m.fromId===uid);
+  const tab=window.APP?.msgTab||'unread';
+  const inbox=all.filter(m=>!m.read&&m.fromId!==uid&&m.fromId!=='system');
+  const readM=all.filter(m=>(m.read||m.fromId===uid)&&m.fromId!=='system');
+  const sent=all.filter(m=>m.fromId===uid);
+  const display=tab==='sent'?sent:tab==='read'?readM:inbox;
+  const tabs=`<div style="display:flex;gap:0;margin-bottom:12px;border:1px solid var(--bdr);border-radius:6px;overflow:hidden;">
+    ${[['unread',`Inbox${inbox.length?` (${inbox.length})`:''}`,],['read','Read'],['sent','Sent']].map(([t,l])=>`
+    <button onclick="window.APP.msgTab='${t}';window.K.nav('parentMsgs')"
+      style="flex:1;padding:9px 6px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border:none;border-right:1px solid var(--bdr);
+      background:${tab===t?'var(--gold)':'var(--panel)'};color:${tab===t?'var(--sb)':'var(--t2)'};">${l}</button>`).join('')}
+  </div>`;
+  return `<div class="sec-hdr"><h3>Messages</h3><button class="btn primary" onclick="window.K.openModal('newMsgModal',{role:'parent'})">+ New</button></div>`+tabs+msgInbox(display,'parent');
 }

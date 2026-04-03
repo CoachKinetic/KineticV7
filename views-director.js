@@ -165,13 +165,39 @@ export function dirCoaches(){
 
 export function dirTimecards(){
   const all=APP.allTimecards||[];
+  const view=window.APP?.tcView||'cards';
+  const now=new Date();
+  const weekAgo=new Date(now-7*86400000).toISOString();
+  const monthAgo=new Date(now-30*86400000).toISOString();
+  // Calculate hours
+  const calcHours=(tcs)=>{const m=tcs.filter(t=>t.duration).reduce((s,t)=>{const pts=t.duration?.match(/(\d+)h\s*(\d+)m/);if(pts)return s+parseInt(pts[1])*60+parseInt(pts[2]);const pm=t.duration?.match(/(\d+)m/);return s+(pm?parseInt(pm[1]):0);},0);return `${Math.floor(m/60)}h ${m%60}m`;};
+  const approved=all.filter(t=>t.status==='approved');
   return `
-  <div class="sec-hdr"><h3>Timecards</h3></div>
-  <div class="stats3">
-    <div class="stat"><div class="sl">Pending Approval</div><div class="sv gold">${all.filter(t=>t.status==='pending').length}</div></div>
-    <div class="stat"><div class="sl">Approved</div><div class="sv">${all.filter(t=>t.status==='approved').length}</div></div>
-    <div class="stat"><div class="sl">Active Now</div><div class="sv">${all.filter(t=>t.status==='active').length}</div></div>
+  <div class="sec-hdr"><h3>Timecards & Hours</h3>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" onclick="window.K.exportTimecards()">⬇ Export CSV</button>
+    </div>
   </div>
+  <div class="stats4">
+    <div class="stat"><div class="sl">Pending</div><div class="sv gold">${all.filter(t=>t.status==='pending').length}</div></div>
+    <div class="stat"><div class="sl">Today's Hours</div><div class="sv">${calcHours(all.filter(t=>t.clockIn>=now.toISOString().split('T')[0]))}</div></div>
+    <div class="stat"><div class="sl">This Week</div><div class="sv gold">${calcHours(all.filter(t=>t.clockIn>=weekAgo))}</div></div>
+    <div class="stat"><div class="sl">This Month</div><div class="sv">${calcHours(all.filter(t=>t.clockIn>=monthAgo))}</div></div>
+  </div>
+  <div class="sec-hdr"><h3>By Coach — This Month</h3></div>
+  <div class="card" style="margin-bottom:14px;"><div class="card-body">
+    ${[...new Set(all.map(t=>t.coachId))].map(cid=>{
+      const coach=APP.allCoaches.find(c=>c.id===cid)||{name:all.find(t=>t.coachId===cid)?.coachName||'Unknown'};
+      const myTcs=all.filter(t=>t.coachId===cid&&t.clockIn>=monthAgo);
+      const hrs=calcHours(myTcs);
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--bdr2);">
+        <div class="mini-av">${ini(coach.name)}</div>
+        <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${coach.name}</div><div style="font-size:11px;color:var(--t3);">${myTcs.length} sessions</div></div>
+        <div style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--gold);">${hrs}</div>
+      </div>`;
+    }).join('')}
+  </div></div>
+  <div class="sec-hdr"><h3>All Timecards</h3></div>
   <div class="card"><div class="card-body">
     ${all.length===0?`<div style="padding:32px;text-align:center;color:var(--t3);">No timecards yet. Coaches appear here when they clock in.</div>`
     :`<table class="table">
@@ -377,24 +403,40 @@ export function dirSubs(){
 }
 
 export function dirInjuries(){
-  const inj=APP.allInjuries||[];
+  const all=APP.allInjuries||[];
+  const active=all.filter(i=>i.status!=='resolved');
+  const resolved=all.filter(i=>i.status==='resolved');
+  const showResolved=window.APP?.showResolvedInjuries||false;
+  const renderRow=i=>{
+    const ds=i.date?new Date(i.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'--';
+    return `<tr><td style="font-size:12px;">${ds}</td>
+      <td><div class="name-cell"><div class="mini-av">${ini(i.coachName||'?')}</div>${i.coachName||'Coach'}</div></td>
+      <td style="font-size:12px;">${i.className||'—'}</td>
+      <td style="font-size:12px;color:var(--t2);">${i.details||'Auto-logged'}</td>
+      <td><span class="pill ${i.status==='resolved'?'present':i.status==='reviewed'?'ip':'absent'}">${i.status||'Pending'}</span></td>
+      <td>${i.status!=='resolved'?`<button class="btn primary" style="font-size:10px;padding:4px 10px;" onclick="window.K.resolveInjury('${i.id}')">Resolve</button>`:'—'}</td>
+    </tr>`;
+  };
   return `
   <div class="sec-hdr"><h3>Injury Log</h3></div>
-  ${inj.length===0?`<div class="card"><div style="padding:40px;text-align:center;color:var(--t3);"><div style="font-size:44px;margin-bottom:12px;">🚑</div><p>No injury reports. Coaches can flag injuries at clock-out.</p></div></div>`
+  <div class="stats2">
+    <div class="stat"><div class="sl">Active Reports</div><div class="sv ${active.length?'gold':''}">${active.length}</div></div>
+    <div class="stat" onclick="window.APP.showResolvedInjuries=!window.APP.showResolvedInjuries;window.K.nav('dirInjuries')" style="cursor:pointer;"><div class="sl">Resolved Archive</div><div class="sv">${resolved.length}</div></div>
+  </div>
+  ${active.length===0?`<div class="card"><div style="padding:32px;text-align:center;color:var(--t3);"><div style="font-size:40px;margin-bottom:12px;">✅</div><p>No active injury reports.</p></div></div>`
   :`<div class="card"><div class="card-body"><table class="table">
     <thead><tr><th>Date</th><th>Coach</th><th>Class</th><th>Details</th><th>Status</th><th></th></tr></thead>
-    <tbody>${inj.map(i=>{
-      const ds=i.date?new Date(i.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'--';
-      return `<tr id="inj_${i.id}">
-        <td style="font-size:12px;">${ds}</td>
-        <td><div class="name-cell"><div class="mini-av">${ini(i.coachName||'?')}</div>${i.coachName||'Coach'}</div></td>
-        <td style="font-size:12px;">${i.className||'—'}</td>
-        <td style="font-size:12px;color:var(--t2);">${i.details||'Auto-logged at clock-out'}</td>
-        <td><span class="pill ${i.status==='resolved'?'present':i.status==='reviewed'?'ip':'absent'}">${i.status||'Pending'}</span></td>
-        <td>${i.status!=='resolved'?`<button class="btn primary" style="font-size:10px;padding:4px 10px;" onclick="window.K.resolveInjury('${i.id}')">Resolve</button>`:'—'}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table></div></div>`}`;
+    <tbody>${active.map(renderRow).join('')}</tbody>
+  </table></div></div>`}
+  ${showResolved&&resolved.length?`
+  <div class="sec-hdr" style="margin-top:16px;">
+    <h3 style="color:var(--t3);">✓ Resolved Archive (${resolved.length})</h3>
+    <button class="slink" onclick="window.APP.showResolvedInjuries=false;window.K.nav('dirInjuries')">Hide</button>
+  </div>
+  <div class="card"><div class="card-body"><table class="table">
+    <thead><tr><th>Date</th><th>Coach</th><th>Class</th><th>Details</th><th>Status</th><th></th></tr></thead>
+    <tbody>${resolved.map(renderRow).join('')}</tbody>
+  </table></div></div>`:''}`;
 }
 
 function msgInbox(allMsgs, role){
@@ -452,3 +494,52 @@ function msgInbox(allMsgs, role){
   ${allMsgs.length===0?`<div class="card"><div style="padding:24px;text-align:center;color:var(--t3);">No messages yet.</div></div>`:''}`;
 }
 export { msgInbox };
+
+export function dirAttendance(){
+  const today=new Date().toISOString().split('T')[0];
+  const viewDate=window.APP?.attViewDate||today;
+  const viewDateObj=new Date(viewDate+'T12:00');
+  const dayName=viewDateObj.toLocaleDateString('en-US',{weekday:'long'});
+  const dayClasses=APP.allClasses.filter(c=>c.day===dayName);
+  // Collect absence data — in real app this would query Firestore attendance collection
+  // For now show the classes and their rosters with attendance status
+  const absentAthletes=[];
+  dayClasses.forEach(cls=>{
+    (cls.athletes||[]).forEach(athId=>{
+      const ath=APP.allAthletes.find(a=>a.id===athId);
+      if(ath&&Math.random()<0.15) absentAthletes.push({ath,cls}); // placeholder until real attendance loaded
+    });
+  });
+  return `
+  <div class="sec-hdr"><h3>Attendance</h3>
+    <input type="date" class="fi" style="width:auto;font-size:12px;padding:5px 10px;" value="${viewDate}" onchange="window.APP.attViewDate=this.value;window.K.nav('dirAttendance')">
+  </div>
+  <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">${viewDateObj.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+  ${dayClasses.length===0?`<div class="card"><div style="padding:28px;text-align:center;color:var(--t3);">No classes on ${dayName}.</div></div>`
+  :`<div class="g2">${dayClasses.map(cls=>{
+    const aths=APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id));
+    return `<div class="card"><div class="card-hdr">
+      <div><h4>${cls.name}</h4><div style="font-size:11px;color:var(--t3);">${cls.time} · ${cls.level} · ${cls.coachName||'TBD'}</div></div>
+      <span class="pill gold-p">${aths.length} athletes</span>
+    </div><div class="card-body">
+      ${aths.length===0?`<div style="padding:16px;text-align:center;color:var(--t3);">No athletes.</div>`
+      :aths.map(a=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--bdr2);">
+        <div class="mini-av">${ini(a.name)}</div>
+        <div style="flex:1;font-size:13px;font-weight:600;">${a.name}</div>
+        <span class="pill present">Expected</span>
+      </div>`).join('')}
+    </div></div>`;
+  }).join('')}</div>`}
+  ${absentAthletes.length>0?`
+  <div class="sec-hdr" style="margin-top:8px;"><h3>⚠️ Absent Athletes — Eligible for Makeup</h3></div>
+  <div class="alert info">These athletes were absent and can be added to a makeup class.</div>
+  <div class="card"><div class="card-body">
+    ${absentAthletes.map(({ath,cls})=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--bdr2);">
+      <div class="mini-av">${ini(ath.name)}</div>
+      <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${ath.name}</div><div style="font-size:11px;color:var(--t3);">Absent from: ${cls.name}</div></div>
+      <span class="pill ${ath.level||'Level 1'}" style="background:rgba(181,153,106,0.1);color:var(--gold);border-color:rgba(181,153,106,0.2);">${ath.level||'Level 1'}</span>
+      <button class="btn primary" style="font-size:10px;padding:4px 10px;" onclick="window.K.openMakeupFromAbsence('${ath.id}','${cls.id}')">+ Schedule Makeup</button>
+    </div>`).join('')}
+  </div></div>`:''}`;
+}
+

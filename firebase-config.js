@@ -31,6 +31,11 @@ export const APP = {
   // UI
   libLevel:'all', libEvent:'all',
   athleteTab:'active',
+  msgTab:'unread', msgFilter:'all',
+  sessionState:{},
+  makeupAthletes:{},
+  attHistDate:null, skillHistDate:null, notesHistDate:null,
+  activeSkillClass:null,
 };
 
 export const BELT_LEVELS = ['Foundation','Level 1','Level 2','Level 3','Level 4','Level 5','Xcel Bronze','Xcel Silver','Xcel Gold','Xcel Platinum'];
