@@ -255,7 +255,10 @@ html,body{height:100%;font-family:'Barlow',sans-serif;background:var(--bg);color
 <div id="obScreen" class="layer light" style="display:none;">
   <div class="ob-box">
     <div class="ob-hdr">
-      <div class="ob-prog" id="obProg"><div class="ob-dot on"></div><div class="ob-dot"></div><div class="ob-dot"></div><div class="ob-dot"></div></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div class="ob-prog" id="obProg" style="flex:1;margin-bottom:0;"><div class="ob-dot on"></div><div class="ob-dot"></div><div class="ob-dot"></div><div class="ob-dot"></div></div>
+        <button onclick="K.signOut()" style="background:transparent;border:1px solid rgba(181,153,106,0.2);color:rgba(250,250,248,0.35);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:4px 10px;border-radius:4px;cursor:pointer;margin-left:12px;">← Sign Out</button>
+      </div>
       <div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:15px;letter-spacing:4px;color:var(--gold);text-transform:uppercase;">KINETIC</div>
       <div id="obLbl" style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(250,250,248,0.35);margin-top:4px;">Director Setup</div>
     </div>
@@ -386,14 +389,14 @@ html,body{height:100%;font-family:'Barlow',sans-serif;background:var(--bg);color
 </div>
 
 <script type="module">
-import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=743';
+import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=744';
 window.APP=APP;
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { doc, setDoc, getDoc, collection, addDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=743';
-import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=743';
-import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=743';
+import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=744';
+import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=744';
+import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=744';
 
 const FIREBASE_CONFIG={apiKey:"AIzaSyCmG-MfINmp1rMQOsXGNmRkBxJROSdqyqk",authDomain:"kinetic-a4862.firebaseapp.com",projectId:"kinetic-a4862",storageBucket:"kinetic-a4862.firebasestorage.app",messagingSenderId:"924145283660",appId:"1:924145283660:web:f1135f7000d9e4897f7ae9"};
 
@@ -434,7 +437,7 @@ onAuthStateChanged(auth,async user=>{
           }
         }catch(e){}
         // Default: director
-        await setDoc(doc(db,'users',user.uid),{name:user.email.split('@')[0],email:user.email,role:'director',belt:'Foundation',certifications:[],createdAt:new Date().toISOString()});
+        await setDoc(doc(db,'users',user.uid),{name:user.email.split('@')[0],email:user.email,role:'director',belt:'Foundation',certifications:[],createdAt:new Date().toISOString()},{merge:true});
       }
     }catch(e){console.warn(e);}
     if(i<3)await new Promise(r=>setTimeout(r,600));

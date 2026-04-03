@@ -1,4 +1,4 @@
-import { APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini } from './firebase-config.js?v=743';
+import { APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini } from './firebase-config.js?v=744';
 
 export function dirHome(){
   const pending=(APP.subRequests||[]).filter(r=>r.status==='pending').length;

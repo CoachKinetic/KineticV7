@@ -1,5 +1,5 @@
-import { APP, SKILLS, BELT_COLORS, ini } from './firebase-config.js?v=743';
-import { msgInbox } from './views-director.js?v=743';
+import { APP, SKILLS, BELT_COLORS, ini } from './firebase-config.js?v=744';
+import { msgInbox } from './views-director.js?v=744';
 
 function switcher(idx, dest){
   const a=APP.parentAthletes||[];
@@ -90,9 +90,9 @@ export function parentSkills(){
     ${evts.map(evt=>{
       const es=skills.filter(s=>s.event===evt);if(!es.length)return '';
       return `<div class="evt-hdr">${evt}</div>${es.map(s=>`<div class="ps-row">
-        <span style="font-size:16px;">${sm[s.id]==='m'?'✅':sm[s.id]==='ip'?'🔄':'⬜'}</span>
+        <span style="font-size:16px;">${skillMap[s.id]==='m'?'✅':skillMap[s.id]==='ip'?'🔄':'⬜'}</span>
         <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${s.name}</div></div>
-        <span class="pill ${sm[s.id]==='m'?'present':sm[s.id]==='ip'?'ip':'not-r'}">${sm[s.id]==='m'?'Mastered':sm[s.id]==='ip'?'In Progress':'Not Ready'}</span>
+        <span class="pill ${skillMap[s.id]==='m'?'present':skillMap[s.id]==='ip'?'ip':'not-r'}">${skillMap[s.id]==='m'?'Mastered':skillMap[s.id]==='ip'?'In Progress':'Not Ready'}</span>
       </div>`).join('')}`;
     }).join('')}
   </div></div>
