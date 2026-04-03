@@ -23,7 +23,8 @@ export function parentHome(){
   const ath=aths[idx];
   if(!ath) return `<div class="alert info">👪 Welcome to KINETIC! Your director will link your child's account shortly.</div>`;
   const skills=SKILLS.filter(s=>s.level===(ath.level||'Level 1'));
-  const mastered=skills.filter(s=>s.def==='mastered').length;
+  const skillMap=APP.parentSkillData?.[ath.id]||{};
+  const mastered=skills.filter(s=>skillMap[s.id]==='m').length;
   const total=aths.reduce((s,a)=>s+(a.tuitionAmount||185),0);
   return `
   ${switcher(idx,'parentHome')}
@@ -38,9 +39,9 @@ export function parentHome(){
       <div class="sec-hdr"><h3>Skills</h3><button class="slink" onclick="window.K.nav('parentSkills')">All →</button></div>
       <div class="card"><div class="card-body">
         ${skills.slice(0,7).map(s=>`<div class="ps-row">
-          <span style="font-size:16px;">${s.def==='mastered'?'✅':s.def==='ip'?'🔄':'⬜'}</span>
+          <span style="font-size:16px;">${skillMap[s.id]==='m'?'✅':skillMap[s.id]==='ip'?'🔄':'⬜'}</span>
           <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${s.name}</div><div style="font-size:11px;color:var(--t3);">${s.event}</div></div>
-          <span class="pill ${s.def==='mastered'?'present':s.def==='ip'?'ip':'not-r'}">${s.def==='mastered'?'Mastered':s.def==='ip'?'In Progress':'Not Ready'}</span>
+          <span class="pill ${skillMap[s.id]==='m'?'present':skillMap[s.id]==='ip'?'ip':'not-r'}">${skillMap[s.id]==='m'?'Mastered':skillMap[s.id]==='ip'?'In Progress':'Not Ready'}</span>
         </div>`).join('')}
       </div></div>
     </div>
@@ -60,6 +61,7 @@ export function parentHome(){
         </div>`:''}
       </div>
       <div class="alert ok">🎉 <strong>${ath.name.split(' ')[0]}</strong> has <strong>${skills.length-mastered} skills left</strong> before pass-off!</div>
+    ${coachNames?`<div class="alert info" style="font-size:12px;">🧑‍🏫 ${ath.name.split(' ')[0]}'s Coach${coachNames.includes(',')?' Team':''}:<strong> ${coachNames}</strong></div>`:''}
     </div>
   </div>`;
 }
@@ -73,7 +75,8 @@ export function parentSkills(){
   // Find this athlete's index in their class for skill lookup
   const athClasses=APP.allClasses?.filter(c=>(c.athletes||[]).includes(ath.id))||[];
   const coachNames=athClasses.map(c=>c.coachName||'Your Coach').filter(Boolean).join(', ');
-  const mastered=skills.filter(s=>s.def==='mastered').length;
+  const skillMap=APP.parentSkillData?.[ath.id]||{};
+  const mastered=skills.filter(s=>skillMap[s.id]==='m').length;
   const evts=[...new Set(skills.map(s=>s.event))];
   return `
   ${switcher(idx,'parentSkills')}
@@ -87,9 +90,9 @@ export function parentSkills(){
     ${evts.map(evt=>{
       const es=skills.filter(s=>s.event===evt);if(!es.length)return '';
       return `<div class="evt-hdr">${evt}</div>${es.map(s=>`<div class="ps-row">
-        <span style="font-size:16px;">${s.def==='mastered'?'✅':s.def==='ip'?'🔄':'⬜'}</span>
+        <span style="font-size:16px;">${sm[s.id]==='m'?'✅':sm[s.id]==='ip'?'🔄':'⬜'}</span>
         <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${s.name}</div></div>
-        <span class="pill ${s.def==='mastered'?'present':s.def==='ip'?'ip':'not-r'}">${s.def==='mastered'?'Mastered':s.def==='ip'?'In Progress':'Not Ready'}</span>
+        <span class="pill ${sm[s.id]==='m'?'present':sm[s.id]==='ip'?'ip':'not-r'}">${sm[s.id]==='m'?'Mastered':sm[s.id]==='ip'?'In Progress':'Not Ready'}</span>
       </div>`).join('')}`;
     }).join('')}
   </div></div>
