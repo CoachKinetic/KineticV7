@@ -284,7 +284,11 @@ html,body{height:100%;font-family:'Barlow',sans-serif;background:var(--bg);color
     </div>
   </aside>
   <div class="main">
-    <div class="topbar"><div class="tb-title" id="tbTitle">KINETIC</div><div id="tbBadge"></div></div>
+    <div class="topbar">
+  <div class="tb-title" id="tbTitle">KINETIC</div>
+  <div id="tbBadge"></div>
+  <div id="simpleModeBar" style="display:none;"></div>
+</div>
     <div class="content" id="mc"></div>
   </div>
 </div>
@@ -341,6 +345,7 @@ html,body{height:100%;font-family:'Barlow',sans-serif;background:var(--bg);color
   </div>
 </div>
 <div class="mo" id="rosterModal" onclick="if(event.target===this)K.closeModal('rosterModal')"><div class="mo-box" onclick="event.stopPropagation()" id="rosterContent"></div></div>
+<div class="mo" id="editTCModal" onclick="if(event.target===this)K.closeModal('editTCModal')"><div class="mo-box" onclick="event.stopPropagation()" id="editTCContent"></div></div>
 <div class="mo" id="addMakeupModal" onclick="if(event.target===this)K.closeModal('addMakeupModal')"><div class="mo-box" onclick="event.stopPropagation()" id="makeupContent"></div></div>
 <div class="mo" id="subReqModal" onclick="if(event.target===this)K.closeModal('subReqModal')">
   <div class="mo-box" onclick="event.stopPropagation()">
@@ -381,14 +386,14 @@ html,body{height:100%;font-family:'Barlow',sans-serif;background:var(--bg);color
 </div>
 
 <script type="module">
-import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js';
+import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=74';
 window.APP=APP;
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { doc, setDoc, getDoc, collection, addDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js';
-import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js';
-import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js';
+import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=74';
+import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=74';
+import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=74';
 
 const FIREBASE_CONFIG={apiKey:"AIzaSyCmG-MfINmp1rMQOsXGNmRkBxJROSdqyqk",authDomain:"kinetic-a4862.firebaseapp.com",projectId:"kinetic-a4862",storageBucket:"kinetic-a4862.firebasestorage.app",messagingSenderId:"924145283660",appId:"1:924145283660:web:f1135f7000d9e4897f7ae9"};
 
@@ -417,6 +422,7 @@ onAuthStateChanged(auth,async user=>{
   }
   if(APP.role==='director'&&!APP.gymId){showOb();return;}
   await loadAll();
+  if(APP.role==='parent')await loadParentData();
   setupRealtimeListeners();
   showApp();
 });
@@ -425,6 +431,18 @@ onAuthStateChanged(auth,async user=>{
 function setupRealtimeListeners(){
   _snapUnsubs.forEach(u=>u());_snapUnsubs=[];
   const gid=APP.gymId;if(!gid)return;
+  // Skills updates (for parent portal)
+  if(APP.role==='parent'){
+    (APP.parentAthletes||[]).forEach(ath=>{
+      const cls=APP.allClasses.find(c=>(c.athletes||[]).includes(ath.id));
+      if(cls){
+        _snapUnsubs.push(onSnapshot(query(collection(db,'skills'),where('classId','==',cls.id)),async _=>{
+          await loadParentData();
+          if(APP.view==='parentSkills'||APP.view==='parentHome')render();
+        }));
+      }
+    });
+  }
   // Sub requests
   _snapUnsubs.push(onSnapshot(query(collection(db,'subRequests'),where('gymId','==',gid)),snap=>{
     APP.subRequests=snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -448,6 +466,18 @@ function setupRealtimeListeners(){
   }));
 }
 
+function updateSimpleModeBar(){
+  const bar=$('simpleModeBar');if(!bar)return;
+  if(APP.role==='coach'&&APP.simpleMode){
+    bar.style.display='flex';
+    bar.innerHTML=`<div style="display:flex;align-items:center;gap:8px;background:rgba(181,153,106,0.12);border:1px solid rgba(181,153,106,0.25);border-radius:6px;padding:4px 12px;">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);">Simple Mode</span>
+      <button onclick="window.APP.simpleMode=false;window.renderNav&&window.renderNav();window.render&&window.render();updateSimpleModeBar();" style="background:transparent;border:1px solid rgba(181,153,106,0.3);color:var(--t2);font-size:13px;width:22px;height:22px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+    </div>`;
+  } else {
+    bar.style.display='none';
+  }
+}
 function updateBadges(){
   const pending=(APP.subRequests||[]).filter(r=>r.status==='pending'||r.status==='claimed').length;
   const unread=(APP.messages||[]).filter(m=>!m.read&&m.fromId!==APP.user?.uid&&m.fromId!=='system').length;
@@ -527,6 +557,8 @@ function initApp(){
   $('smTog').style.display=r==='coach'?'flex':'none';
   APP.view=r==='coach'?'coachDash':r==='director'?'dirHome':'parentHome';
   APP.attDay=new Date().toLocaleDateString('en-US',{weekday:'long'});
+  // Coaches default to simple mode — they can exit with X
+  if(r==='coach')APP.simpleMode=true;
   renderNav();render();updateBadges();
 }
 
@@ -567,6 +599,7 @@ function render(){
   if(v.startsWith('skill_')){c.innerHTML=skillDetail(v.replace('skill_',''));return;}
   c.innerHTML=(views[v]?views[v]():`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;text-align:center;gap:14px;"><div style="font-size:44px;opacity:0.2;">🔒</div><h3 style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;">Coming Soon</h3></div>`);
   if(v==='coachDash'){startClock();if(APP.clockedIn)loadAI();}
+  updateSimpleModeBar();
 }
 
 // ─── CLOCK ───
@@ -590,6 +623,47 @@ async function loadAI(){
     const data=await res.json();
     if(data.content?.[0]){el.innerHTML=`<div class="ai-txt">${data.content[0].text.replace(/\n/g,'<br>').replace(/•/g,'<strong>•</strong>')}</div><div class="ai-ac"><button class="ai-btn" onclick="window.toast('📋 Saved!','ai')">Save as Plan</button><button class="ai-btn" onclick="loadAI()">↻ Regenerate</button></div>`;}
   }catch(e){el.innerHTML=`<div class="ai-txt"><strong>• Hollow body check</strong> before every bar approach.<br><strong>• Celebrate</strong> skills mastered last session.<br><strong>• Conditioning:</strong> 3× hollow holds 30 sec.</div>`;}
+}
+
+// ─── PARENT DATA LOADER ───
+async function loadParentData(){
+  if(APP.role!=='parent')return;
+  try{
+    // Load skill data for each athlete
+    APP.parentSkillData=APP.parentSkillData||{};
+    APP.parentSkillUpdated=APP.parentSkillUpdated||{};
+    APP.parentAttData=APP.parentAttData||{};
+    for(const ath of (APP.parentAthletes||[])){
+      const athClasses=APP.allClasses.filter(c=>(c.athletes||[]).includes(ath.id));
+      // Load most recent skill snapshot for this athlete
+      for(const cls of athClasses){
+        // Query skills collection for this class
+        try{
+          const {getDocs:gd2,collection:col2,query:q2,where:w2,orderBy:ob2,limit:lim2}=await import("https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js");
+          // Get all skill docs for this class
+          const skillSnaps=await gd2(q2(col2(db,'skills'),w2('classId','==',cls.id),w2('gymId','==',APP.gymId||'_')));
+          let latestDate='';let latestState={};
+          skillSnaps.docs.forEach(d=>{
+            const data=d.data();
+            if(data.date>latestDate){latestDate=data.date;latestState=data.skills||{};}
+          });
+          // Map the skill state to this athlete's index in the class
+          const athIdx=(cls.athletes||[]).indexOf(ath.id);
+          if(athIdx>-1&&latestState[athIdx]){
+            if(!APP.parentSkillData[ath.id])APP.parentSkillData[ath.id]={};
+            Object.assign(APP.parentSkillData[ath.id],latestState[athIdx]);
+            if(latestDate>=(APP.parentSkillUpdated[ath.id]||''))APP.parentSkillUpdated[ath.id]=latestDate;
+          }
+        }catch(e){}
+        // Load attendance for today
+        try{
+          const today=new Date().toISOString().split('T')[0];
+          const attSnap=await getDoc(doc(db,'attendance/'+today+'_'+cls.id));
+          if(attSnap.exists()){const d=attSnap.data();APP.parentAttData[ath.id]={present:(d.presentIds||[]).includes(ath.id),absent:(d.absentIds||[]).includes(ath.id),date:today};}
+        }catch(e){}
+      }
+    }
+  }catch(e){console.warn('loadParentData:',e);}
 }
 
 // ─── PRE-CLASS NOTIFICATIONS ───
@@ -634,7 +708,7 @@ function startNotificationWatcher(){
 // ═══════════════════════════════════════════
 const K=window.K={
 
-nav(v){APP.view=v;renderNav();render();},
+nav(v){APP.view=v;renderNav();render();if(v==='dirAttendance')K.loadAttendanceRecords();},
 toggleSimple(){APP.simpleMode=!APP.simpleMode;renderNav();render();toast(APP.simpleMode?'Simple Mode ON':'Simple Mode OFF');},
 
 // AUTH
@@ -798,6 +872,18 @@ openModal(id,data={}){
       <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="K.closeModal('addMakeupModal')">Cancel</button>
       <button class="btn primary" style="flex:1;" onclick="K.addMakeupAthlete('${data.classId||''}')">Add for Today →</button></div>`;
   }
+  if(id==='editTCModal'){
+    const tc=APP.allTimecards?.find(t=>t.id===data.id);if(!tc)return;
+    const fmt=ts=>ts?new Date(ts).toLocaleString('en-US',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(',',''):'';
+    $('editTCContent').innerHTML=`<div class="mo-title">Edit Timecard</div>
+      <p style="font-size:13px;color:var(--t2);margin-bottom:16px;">Editing: <strong>${tc.coachName||'Coach'}</strong> on ${tc.date||''}</p>
+      <div class="fg"><label class="fl">Clock In</label><input class="fi" type="datetime-local" id="tc_in" value="${tc.clockIn?tc.clockIn.slice(0,16):''}"></div>
+      <div class="fg"><label class="fl">Clock Out</label><input class="fi" type="datetime-local" id="tc_out" value="${tc.clockOut?tc.clockOut.slice(0,16):''}"></div>
+      <div class="fg"><label class="fl">Director Note</label><input class="fi" id="tc_note" value="${tc.directorNote||''}" placeholder="Reason for edit..."></div>
+      ${tc.editHistory?.length?`<div style="font-size:11px;color:var(--t3);margin-bottom:12px;">Previously edited: ${tc.editHistory.length} time(s)</div>`:''}
+      <div style="display:flex;gap:8px;"><button class="btn" style="flex:1;" onclick="K.closeModal('editTCModal')">Cancel</button>
+      <button class="btn primary" style="flex:1;" onclick="K.saveEditTC('${tc.id}')">Save Changes →</button></div>`;
+  }
   if(id==='changePwModal'){$('cpErr').style.display='none';sval('cpNew','');sval('cpConf','');}
   $(id).classList.add('open');
 },
@@ -822,8 +908,17 @@ markAll(clsIdx,status){
 async saveAtt(clsId){
   sync(true);
   const cls=APP.allClasses.find(c=>c.id===clsId);
+  const aths=APP.allAthletes.filter(a=>(cls?.athletes||[]).includes(a.id));
+  const state=APP.attState[clsId]||{};
+  // Build both index-based (legacy) and ID-based maps
+  const presentIds=aths.filter((_,i)=>state[i]!=='absent').map(a=>a.id);
+  const absentIds=aths.filter((_,i)=>state[i]==='absent').map(a=>a.id);
+  const today=new Date().toISOString().split('T')[0];
+  const docId=`${today}_${clsId}`;
   try{
-    await setDoc(doc(db,`attendance/${APP.user.uid}_${new Date().toISOString().split('T')[0]}_${clsId}`),{date:new Date().toISOString(),attendance:APP.attState[clsId]||{},coachId:APP.user.uid,classId:clsId,gymId:APP.gymId||null},{merge:true});
+    await setDoc(doc(db,`attendance/${docId}`),{date:today,attendance:state,presentIds,absentIds,coachId:APP.user.uid,classId:clsId,className:cls?.name||'',gymId:APP.gymId||null,updatedAt:new Date().toISOString()},{merge:true});
+    // Also keep legacy path for backward compat
+    await setDoc(doc(db,`attendance/${APP.user.uid}_${today}_${clsId}`),{date:today,attendance:state,presentIds,absentIds,coachId:APP.user.uid,classId:clsId,gymId:APP.gymId||null},{merge:true});
     if(!APP.attSavedClasses)APP.attSavedClasses={};
     APP.attSavedClasses[clsId]=true;
     // Mark overall attSaved if at least one class saved
@@ -1141,6 +1236,14 @@ async confirmSubFromCoach(subReqId){
       addDoc(collection(db,'messages'),{...base,toId:r.subCoachId,subject:`You're confirmed: ${r.className} on ${r.date}`}),
       addDoc(collection(db,'messages'),{...base,toId:null,toRole:'director',subject:`Sub Confirmed: ${r.className} on ${r.date}`}),
     ]);
+    // Mark all sub_confirm_request messages for this sub as read so they disappear
+    APP.messages=(APP.messages||[]).map(m=>
+      m.type==='sub_confirm_request'&&m.subRequestId===subReqId?{...m,read:true}:m
+    );
+    try{
+      const subMsgs=(APP.messages||[]).filter(m=>m.type==='sub_confirm_request'&&m.subRequestId===subReqId);
+      await Promise.all(subMsgs.filter(m=>m.id).map(m=>setDoc(doc(db,'messages',m.id),{read:true},{merge:true})));
+    }catch(e){}
     // Add sub to class coaches + note
     const cls=APP.allClasses.find(c=>c.id===r.classId);
     if(cls&&r.subCoachId){
@@ -1170,12 +1273,58 @@ async dismissConcern(noteId){
 },
 
 // CLASS MANAGEMENT
+async loadAttendanceRecords(){
+  const viewDate=APP.attViewDate||new Date().toISOString().split('T')[0];
+  const viewDateObj=new Date(viewDate+'T12:00');
+  const dayName=viewDateObj.toLocaleDateString('en-US',{weekday:'long'});
+  const dayClasses=APP.allClasses.filter(c=>c.day===dayName);
+  APP.attRecords=APP.attRecords||{};
+  try{
+    await Promise.all(dayClasses.map(async cls=>{
+      const key=viewDate+'_'+cls.id;
+      try{
+        const snap=await getDoc(doc(db,'attendance/'+key));
+        if(snap.exists())APP.attRecords[key]={id:snap.id,...snap.data()};
+        else APP.attRecords[key]=null;
+      }catch(e){APP.attRecords[key]=null;}
+    }));
+  }catch(e){console.warn(e);}
+},
+
+async editAttRecord(date,clsId,athId,status){
+  const key=date+'_'+clsId;
+  const rec=APP.attRecords?.[key]||{presentIds:[],absentIds:[],classId:clsId,date,gymId:APP.gymId||null};
+  let {presentIds=[],absentIds=[]}=rec;
+  if(status==='present'){presentIds=[...new Set([...presentIds,athId])];absentIds=absentIds.filter(id=>id!==athId);}
+  else{absentIds=[...new Set([...absentIds,athId])];presentIds=presentIds.filter(id=>id!==athId);}
+  try{
+    await setDoc(doc(db,'attendance/'+key),{...rec,presentIds,absentIds,editedByDirector:APP.user?.uid,updatedAt:new Date().toISOString()},{merge:true});
+    if(!APP.attRecords)APP.attRecords={};
+    APP.attRecords[key]={...rec,presentIds,absentIds};
+    toast('✓ Attendance updated');render();
+  }catch(e){toast('⚠️ '+e.message,'warn');}
+},
+
 addMakeupAthlete(classId){
   const athId=$('mu_ath')?.value;if(!athId){toast('Select an athlete','warn');return;}
   if(!APP.makeupAthletes)APP.makeupAthletes={};
   if(!APP.makeupAthletes[classId])APP.makeupAthletes[classId]=[];
   APP.makeupAthletes[classId].push({athId,date:new Date().toISOString().split('T')[0]});
   K.closeModal('addMakeupModal');toast('✓ Makeup athlete added for today');render();
+},
+async saveEditTC(id){
+  const clockIn=$('tc_in')?.value;const clockOut=$('tc_out')?.value;const note=$('tc_note')?.value||'';
+  const tc=APP.allTimecards?.find(t=>t.id===id);if(!tc)return;
+  // Calculate new duration
+  let dur=tc.duration||'';
+  if(clockIn&&clockOut){const diff=Math.floor((new Date(clockOut)-new Date(clockIn))/60000);const h=Math.floor(diff/60),m=diff%60;dur=h>0?`${h}h ${m}m`:`${m}m`;}
+  const editEntry={editedBy:APP.user?.uid,editedByName:APP.profile?.name||'Director',at:new Date().toISOString(),oldIn:tc.clockIn,oldOut:tc.clockOut,reason:note};
+  try{
+    await setDoc(doc(db,'timecards',id),{clockIn:clockIn?new Date(clockIn).toISOString():tc.clockIn,clockOut:clockOut?new Date(clockOut).toISOString():tc.clockOut,duration:dur,directorNote:note,editHistory:[...(tc.editHistory||[]),editEntry],status:'approved'},{merge:true});
+    const idx=(APP.allTimecards||[]).findIndex(t=>t.id===id);
+    if(idx>-1){APP.allTimecards[idx]={...APP.allTimecards[idx],clockIn:clockIn?new Date(clockIn).toISOString():tc.clockIn,clockOut:clockOut?new Date(clockOut).toISOString():tc.clockOut,duration:dur,directorNote:note,status:'approved'};}
+    K.closeModal('editTCModal');toast('✓ Timecard updated!');render();
+  }catch(e){toast('⚠️ '+e.message,'warn');}
 },
 exportTimecards(){
   const all=APP.allTimecards||[];
