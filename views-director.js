@@ -1,4 +1,4 @@
-import { APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini } from './firebase-config.js?v=741';
+import { APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini } from './firebase-config.js?v=742';
 
 export function dirHome(){
   const pending=(APP.subRequests||[]).filter(r=>r.status==='pending').length;
@@ -244,75 +244,53 @@ export function dirTimecards(){
 
 export function dirMsgs(){
   const tab=window.APP?.msgTab||'unread';
-  const folder=window.APP?.msgFolder||'mine'; // 'mine' or 'staff'
   const all=APP.messages||[];
   const me=APP.user?.uid;
 
-  // Staff messages = coach↔parent conversations (not involving director)
-  const isStaffMsg=m=>m.fromRole==='coach'&&m.toRole==='parents'||
-                       m.fromRole==='parent'&&m.toRole==='coaches'||
-                       (m.fromRole==='coach'&&m.toId&&APP.allAthletes?.find(a=>a.parentEmail&&m.toId!==me));
+  const inbox=all.filter(m=>!m.read&&m.fromId!==me&&m.fromId!=='system');
+  const readMs=all.filter(m=>(m.read||m.fromId===me)&&m.fromId!=='system');
+  const sent=all.filter(m=>m.fromId===me&&m.fromId!=='system');
+  const display=tab==='sent'?sent:tab==='read'?readMs:inbox;
 
-  // My messages = anything sent TO me or BY me
-  const isMyMsg=m=>m.toId===me||m.fromId===me||m.toRole==='director'||m.toRole==='coaches'||m.toRole==='parents';
+  // Group by role for Staff Messages section
+  const coachMsgs=display.filter(m=>m.fromRole==='coach'||m.toRole==='coaches');
+  const parentMsgs=display.filter(m=>m.fromRole==='parent'||m.toRole==='parents');
+  const otherMsgs=display.filter(m=>m.fromRole!=='coach'&&m.toRole!=='coaches'&&m.fromRole!=='parent'&&m.toRole!=='parents');
 
-  const myMsgs=all.filter(m=>m.fromId!=='system'&&isMyMsg(m)&&!isStaffMsg(m));
-  const staffMsgs=all.filter(m=>isStaffMsg(m)&&m.fromId!=='system');
-  const activeMsgs=folder==='staff'?staffMsgs:myMsgs;
-
-  const unread=activeMsgs.filter(m=>!m.read&&m.fromId!==me&&m.fromId!=='system');
-  const read=activeMsgs.filter(m=>(m.read||m.fromId===me)&&m.fromId!=='system');
-  const sent=activeMsgs.filter(m=>m.fromId===me);
-  const counts={unread:unread.length,read:read.length,sent:sent.length,staff:staffMsgs.filter(m=>!m.read).length};
-  const displayMsgs=tab==='sent'?sent:tab==='read'?read:unread;
-
-  // Find indices in master array
-  const withIdx=displayMsgs.map(m=>({msg:m,idx:all.indexOf(m)}));
+  const row=(m,i)=>{
+    const isMine=m.fromId===me;
+    const isUnread=!m.read&&!isMine;
+    const preview=isMine?'You: '+(m.preview||m.body||''):m.preview||m.body||'';
+    return `<div style="display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border-bottom:1px solid var(--bdr2);cursor:pointer;${isUnread?'background:rgba(181,153,106,0.04);':''}" onclick="window.K.openModal('msgViewModal',{idx:${all.indexOf(m)},role:'director'})">
+      <div class="mini-av" style="${isUnread?'background:linear-gradient(135deg,var(--gold),#7A5A2A);color:var(--sb);':''}">${ini(m.from||'?')}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;font-weight:${isUnread?700:500};">${isMine?'To: '+(m.toRole||'recipient'):m.from||'Unknown'} <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;text-transform:uppercase;color:var(--gold);opacity:0.7;">${m.fromRole||''}</span></span>
+          <span style="font-size:11px;color:var(--t3);">${m.time||''}</span>
+        </div>
+        <div style="font-size:13px;font-weight:${isUnread?600:400};margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.subject||''}</div>
+        <div style="font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">${preview}</div>
+      </div>
+      ${isUnread?`<div style="width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0;margin-top:5px;"></div>`:''}
+    </div>`;
+  };
 
   return `
   <div class="sec-hdr"><h3>Messages</h3><button class="btn primary" onclick="window.K.openModal('newMsgModal',{role:'director'})">+ New Message</button></div>
-
   <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--bdr);border-radius:6px;overflow:hidden;">
-    ${[['unread','Inbox',counts.unread],['read','Read',counts.read],['sent','Sent',counts.sent]].map(([t,label,cnt])=>`
+    ${[['unread','Inbox',inbox.length],['read','Read',0],['sent','Sent',0]].map(([t,label,cnt])=>`
     <button onclick="window.APP.msgTab='${t}';window.K.nav('dirMsgs')"
-      style="flex:1;padding:10px 8px;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border:none;border-right:1px solid var(--bdr);transition:all 0.15s;
-      background:${tab===t?'var(--gold)':'var(--panel)'};color:${tab===t?'var(--sb)':'var(--t2)'};">
-      ${label}${cnt>0&&t==='unread'?` <span style="background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:9px;">${cnt}</span>`:''}
+      style="flex:1;padding:10px 6px;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border:none;border-right:1px solid var(--bdr);background:${tab===t?'var(--gold)':'var(--panel)'};color:${tab===t?'var(--sb)':'var(--t2)'};">
+      ${label}${cnt>0?` <span style="background:var(--red);color:#fff;border-radius:10px;padding:1px 5px;font-size:9px;">${cnt}</span>`:''}
     </button>`).join('')}
   </div>
-
-  <div style="display:flex;gap:6px;margin-bottom:12px;">
-    ${[['all','All'],['coaches','Coaches 🧑‍🏫'],['parents','Parents 👪']].map(([f,label])=>`
-    <button onclick="window.APP.msgFilter='${f}';window.K.nav('dirMsgs')"
-      class="btn ${filter===f?'primary':''}" style="font-size:10px;padding:5px 12px;">${label}</button>`).join('')}
-  </div>
-
-  ${withIdx.length===0?`<div class="card"><div style="padding:32px;text-align:center;color:var(--t3);">
-    <div style="font-size:32px;margin-bottom:10px;">${tab==='unread'?'📬':tab==='sent'?'📤':'📭'}</div>
-    <div>${tab==='unread'?'No new messages':'No messages here yet'}</div>
-  </div></div>`:`<div class="card"><div class="card-body">
-    ${withIdx.map(({msg:m,idx:i})=>{
-      const isMine=m.fromId===me;
-      const isUnread=!m.read&&!isMine;
-      const preview=isMine?`You: ${m.preview||m.body||''}`:m.preview||m.body||'';
-      const stripRe=s=>(s||'').replace(/^(Re:\s*)+/i,'').trim().toLowerCase();
-      const tid=m.threadId||(m.subRequestId?'sub_'+m.subRequestId:null)||stripRe(m.subject)||String(i);
-      const threadCount=(all.filter(x=>{const xt=x.threadId||(x.subRequestId?'sub_'+x.subRequestId:null)||stripRe(x.subject)||'_';return xt===tid;})).length;
-      return `<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--bdr2);cursor:pointer;${isUnread?'background:rgba(181,153,106,0.04);':''}" onclick="window.K.openModal('msgViewModal',{idx:${i},role:'director',tid:'${tid.replace(/['"]/g,'')}'})" >
-        <div class="mini-av" style="${isUnread?'background:linear-gradient(135deg,var(--gold),#7A5A2A);color:var(--sb);':''}">${ini(m.from||'?')}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div style="font-size:13px;font-weight:${isUnread?700:500};">${isMine?`To: ${m.toRole||'recipient'}`:m.from||'Unknown'} <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;text-transform:uppercase;color:var(--gold);opacity:0.7;">${m.fromRole||''}</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">${threadCount>1?`<span style="font-size:9px;color:var(--t3);border:1px solid var(--bdr);border-radius:10px;padding:1px 6px;">${threadCount}</span>`:''}<span style="font-size:11px;color:var(--t3);">${m.time||''}</span></div>
-          </div>
-          <div style="font-size:13px;font-weight:${isUnread?600:400};margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.subject||''}</div>
-          <div style="font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">${preview}</div>
-        </div>
-        ${isUnread?`<div style="width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0;margin-top:5px;"></div>`:''}
-      </div>`;
-    }).join('')}
-  </div></div>`}`;
+  ${display.length===0
+    ?`<div class="card"><div style="padding:32px;text-align:center;color:var(--t3);"><div style="font-size:32px;margin-bottom:10px;">${tab==='unread'?'📬':tab==='sent'?'📤':'📭'}</div><div>${tab==='unread'?'No new messages':'Nothing here yet'}</div></div></div>`
+    :`${coachMsgs.length?`<div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);margin-bottom:6px;">Coaches</div><div class="card" style="margin-bottom:14px;"><div class="card-body">${coachMsgs.map(row).join('')}</div></div>`:''}
+    ${parentMsgs.length?`<div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);margin-bottom:6px;">Parents</div><div class="card" style="margin-bottom:14px;"><div class="card-body">${parentMsgs.map(row).join('')}</div></div>`:''}
+    ${otherMsgs.length?`<div class="card"><div class="card-body">${otherMsgs.map(row).join('')}</div></div>`:''}`}`;
 }
+
 
 export function dirBilling(){
   const total=APP.allAthletes.reduce((s,a)=>s+(a.tuitionAmount||185),0);

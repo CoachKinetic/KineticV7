@@ -1,5 +1,5 @@
-import { APP, SKILLS, BELT_COLORS, ini } from './firebase-config.js?v=741';
-import { msgInbox } from './views-director.js?v=741';
+import { APP, SKILLS, BELT_COLORS, ini } from './firebase-config.js?v=742';
+import { msgInbox } from './views-director.js?v=742';
 
 function switcher(idx, dest){
   const a=APP.parentAthletes||[];
@@ -7,7 +7,7 @@ function switcher(idx, dest){
   return `<div style="margin-bottom:20px;">
     <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--t3);margin-bottom:10px;">My Athletes</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      ${a.map((ath,i)=>`<div onclick="APP.parentAthIdx=${i};window.K.nav('${dest}')"
+      ${a.map((ath,i)=>`<div onclick="window.APP.parentAthIdx=${i};window.K.nav('${dest}')"
         style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:8px;cursor:pointer;border:2px solid ${i===idx?'var(--gold)':'var(--bdr)'};background:${i===idx?'rgba(181,153,106,0.08)':'var(--panel)'};transition:all 0.15s;">
         <div class="mini-av" style="width:28px;height:28px;font-size:11px;">${ini(ath.name)}</div>
         <div><div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;">${ath.name}</div>
@@ -73,8 +73,8 @@ export function parentSkills(){
   if(!ath) return `<div class="alert info">No athlete linked yet.</div>`;
   const skills=SKILLS.filter(s=>s.level===(ath.level||'Level 1'));
   // Find this athlete's index in their class for skill lookup
-  const athClasses=APP.allClasses?.filter(c=>(c.athletes||[]).includes(ath.id))||[];
-  const coachNames=athClasses.map(c=>c.coachName||'Your Coach').filter(Boolean).join(', ');
+  // Coach names stored on athlete record by director when assigning
+  const coachNames=(ath.coachNames||[]).join(', ')||'';
   const skillMap=APP.parentSkillData?.[ath.id]||{};
   const mastered=skills.filter(s=>skillMap[s.id]==='m').length;
   const evts=[...new Set(skills.map(s=>s.event))];

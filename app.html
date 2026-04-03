@@ -386,14 +386,14 @@ html,body{height:100%;font-family:'Barlow',sans-serif;background:var(--bg);color
 </div>
 
 <script type="module">
-import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=741';
+import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, greet, toast, sync } from './firebase-config.js?v=742';
 window.APP=APP;
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { doc, setDoc, getDoc, collection, addDoc, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=741';
-import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=741';
-import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=741';
+import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=742';
+import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance } from './views-director.js?v=742';
+import { parentHome, parentSkills, parentTuition, parentMsgs } from './views-parent.js?v=742';
 
 const FIREBASE_CONFIG={apiKey:"AIzaSyCmG-MfINmp1rMQOsXGNmRkBxJROSdqyqk",authDomain:"kinetic-a4862.firebaseapp.com",projectId:"kinetic-a4862",storageBucket:"kinetic-a4862.firebasestorage.app",messagingSenderId:"924145283660",appId:"1:924145283660:web:f1135f7000d9e4897f7ae9"};
 
@@ -420,7 +420,24 @@ onAuthStateChanged(auth,async user=>{
     }catch(e){console.warn(e);}
     if(i<3)await new Promise(r=>setTimeout(r,600));
   }
-  if(APP.role==='director'&&!APP.gymId){showOb();return;}
+  // Only directors without a gym go to onboarding
+  // Coaches/parents without gymId show a "contact your director" message
+  if(!APP.gymId){
+    if(APP.role==='director'){showOb();return;}
+    else{
+      hide('loadingScreen');hide('obScreen');hide('pwScreen');
+      $('appShell').style.display='flex';
+      APP.view=APP.role==='coach'?'coachDash':'parentHome';
+      initApp();
+      document.getElementById('mc').innerHTML=`<div style="max-width:400px;margin:60px auto;text-align:center;">
+        <div style="font-size:48px;margin-bottom:16px;">⏳</div>
+        <h2 style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;margin-bottom:10px;">Account Not Linked Yet</h2>
+        <p style="font-size:14px;color:var(--t2);line-height:1.6;">Your account hasn't been linked to a gym yet. Ask your director to invite you — they'll share login credentials.</p>
+        <button class="btn danger" style="margin-top:24px;" onclick="K.signOut()">Sign Out</button>
+      </div>`;
+      return;
+    }
+  }
   await loadAll();
   if(APP.role==='parent')await loadParentData();
   setupRealtimeListeners();
