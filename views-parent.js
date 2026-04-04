@@ -2,14 +2,12 @@ import { APP, SKILLS, BELT_COLORS, ini } from './firebase-config.js?v=800';
 
 function switcher(idx,dest){
   const a=APP.parentAthletes||[];if(a.length<=1)return'';
-  return `<div style="margin-bottom:20px;display:flex;gap:8px;flex-wrap:wrap;">${a.map((ath,i)=>`<div onclick="window.APP.parentAthIdx=${i};window.K.nav('${dest}')" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:20px;cursor:pointer;border:2px solid ${i===idx?'var(--gold)':'var(--bdr)'};background:${i===idx?'rgba(181,153,106,0.1)':'var(--panel)'};transition:all 0.15s;"><div class="mini-av" style="width:24px;height:24px;font-size:9px;">${ini(ath.name)}</div><span style="font-size:13px;font-weight:${i===idx?700:500};color:${i===idx?'var(--gold)':'var(--t2)'};">${ath.name.split(' ')[0]}</span></div>`).join('')}</div>`;
+  return`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">${a.map((ath,i)=>`<div onclick="window.APP.parentAthIdx=${i};window.K.nav('${dest}')" style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:20px;cursor:pointer;border:2px solid ${i===idx?'var(--gold)':'var(--bdr)'};background:${i===idx?'rgba(181,153,106,0.1)':'var(--panel)'};transition:all 0.15s;"><div class="mini-av" style="width:24px;height:24px;font-size:9px;">${ini(ath.name)}</div><span style="font-size:13px;font-weight:${i===idx?700:500};color:${i===idx?'var(--gold)':'var(--t2)'};">${ath.name.split(' ')[0]}</span></div>`).join('')}</div>`;
 }
 
 export function parentHome(){
-  const aths=APP.parentAthletes||[];
-  const idx=APP.parentAthIdx||0;
-  const ath=aths[idx];
-  if(!ath)return`<div class="empty-state"><div class="es-icon">👪</div><h3>Welcome to KINETIC</h3><p>Your director will link your child's account shortly.</p></div>`;
+  const aths=APP.parentAthletes||[];const idx=APP.parentAthIdx||0;const ath=aths[idx];
+  if(!ath)return`<div class="empty-state" style="margin-top:60px;"><div class="es-icon">👪</div><h3>Welcome to KINETIC</h3><p>Your director will link your child's account shortly.</p></div>`;
   const skills=SKILLS.filter(s=>s.level===(ath.level||'Level 1'));
   const skillMap=APP.parentSkillData?.[ath.id]||{};
   const mastered=skills.filter(s=>skillMap[s.id]==='m').length;
@@ -18,60 +16,74 @@ export function parentHome(){
   const tuitionAmt=ath.tuitionAmount||185;
   const tuitionStatus=ath.tuitionStatus||'pending';
   const unread=(APP.messages||[]).filter(m=>!m.read&&m.fromId!==APP.user?.uid&&m.fromId!=='system').length;
-  const docs=(APP.allDocuments||[]).filter(d=>d.sharedWith==='all'||(d.sharedWithIds||[]).includes(ath.id));
-  return `
+  const docs=(APP.allDocuments||[]).filter(d=>{if(d.sharedWith==='all')return true;if(d.sharedWith==='athlete'&&(d.sharedWithIds||[]).includes(ath.id))return true;if(d.sharedWith==='class'){const myClasses=(APP.allClasses||[]).filter(c=>(c.athletes||[]).includes(ath.id));return myClasses.some(c=>(d.sharedWithIds||[]).includes(c.id));}return false;});
+  const myClasses=(APP.allClasses||[]).filter(c=>(c.athletes||[]).includes(ath.id));
+  return`
   ${switcher(idx,'parentHome')}
-  <div style="background:linear-gradient(135deg,#1C1C1C,#2A2A2A);border-radius:16px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden;">
-    <div style="position:absolute;right:-20px;top:-20px;width:120px;height:120px;border-radius:50%;background:rgba(181,153,106,0.08);"></div>
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
-      <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#7A5A2A);display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:#1C1C1C;">${ini(ath.name)}</div>
-      <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:#FAFAF8;">${ath.name}</div>
-      <div style="display:flex;align-items:center;gap:6px;margin-top:3px;"><div style="width:8px;height:8px;border-radius:50%;background:${BELT_COLORS[ath.level||'Level 1']};"></div><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">${ath.level||'Level 1'}</span></div></div>
+  <div style="background:linear-gradient(135deg,#1C1C1C 0%,#242424 60%,#1a1a1a 100%);border-radius:16px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden;">
+    <div style="position:absolute;right:-30px;top:-30px;width:140px;height:140px;border-radius:50%;background:rgba(181,153,106,0.06);pointer-events:none;"></div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+      <div style="width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#7A5A2A);display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-weight:900;font-size:20px;color:#1C1C1C;flex-shrink:0;">${ini(ath.name)}</div>
+      <div><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:20px;color:#FAFAF8;">${ath.name}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:5px;"><div style="width:10px;height:10px;border-radius:50%;background:${BELT_COLORS[ath.level||'Level 1']};"></div><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">${ath.level||'Level 1'}</span></div>
+      ${myClasses.length?`<div style="font-size:12px;color:rgba(250,250,248,0.4);margin-top:2px;">${myClasses.map(c=>c.name).join(' · ')}</div>`:''}</div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:14px;text-align:center;"><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:24px;color:var(--gold);">${pct}%</div><div style="font-size:11px;color:rgba(250,250,248,0.5);margin-top:3px;text-transform:uppercase;letter-spacing:1px;">Progress</div></div>
-      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:14px;text-align:center;"><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:24px;color:#5EC85E;">${mastered}</div><div style="font-size:11px;color:rgba(250,250,248,0.5);margin-top:3px;text-transform:uppercase;letter-spacing:1px;">Mastered</div></div>
-      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:14px;text-align:center;"><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:24px;color:#F5A623;">${ip}</div><div style="font-size:11px;color:rgba(250,250,248,0.5);margin-top:3px;text-transform:uppercase;letter-spacing:1px;">In Progress</div></div>
+    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:14px 16px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(250,250,248,0.4);">Skill Progress</span><span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:var(--gold);">${pct}%</span></div>
+      <div style="height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;border-radius:4px;background:linear-gradient(90deg,var(--gold),#C8AE86);width:${pct}%;transition:width 1s ease;"></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        ${[{v:mastered,l:'Mastered',c:'#5EC85E'},{v:ip,l:'In Progress',c:'#F59E0B'},{v:skills.length-(mastered+ip),l:'Not Started',c:'rgba(250,250,248,0.3)'}].map(s=>`<div style="text-align:center;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:${s.c};">${s.v}</div><div style="font-size:10px;color:rgba(250,250,248,0.35);margin-top:2px;">${s.l}</div></div>`).join('')}
+      </div>
     </div>
   </div>
-  <div class="g2">
-    <div class="dash-tile" onclick="window.K.nav('parentSkills')"><div class="dt-icon">🥋</div><div class="dt-label">Skills</div><div class="dt-sub">${mastered}/${skills.length} mastered</div></div>
-    <div class="dash-tile" onclick="window.K.nav('parentTuition')"><div class="dt-icon">💳</div><div class="dt-label">Tuition</div><div class="dt-sub ${tuitionStatus==='overdue'?'red':tuitionStatus==='paid'?'green':''}">${tuitionStatus==='paid'?'✓ Paid':tuitionStatus==='overdue'?'⚠️ Overdue':'$'+tuitionAmt+'/mo'}</div></div>
-    <div class="dash-tile" onclick="window.K.nav('parentMsgs')" style="position:relative;">${unread?`<div style="position:absolute;top:10px;right:10px;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;">${unread}</div>`:''}  <div class="dt-icon">💬</div><div class="dt-label">Messages</div><div class="dt-sub">${unread?unread+' unread':'All caught up'}</div></div>
-    <div class="dash-tile" onclick="window.K.nav('parentDocuments')"><div class="dt-icon">📄</div><div class="dt-label">Documents</div><div class="dt-sub">${docs.length} shared</div></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+    ${[
+      {icon:'🥋',label:'Skills',sub:`${mastered}/${skills.length} mastered`,nav:'parentSkills',accent:'var(--gold)'},
+      {icon:'💳',label:'Tuition',sub:tuitionStatus==='paid'?'✓ Paid this month':tuitionStatus==='overdue'?'⚠️ Payment overdue':'$'+tuitionAmt+'/mo',nav:'parentTuition',accent:tuitionStatus==='paid'?'#5EC85E':tuitionStatus==='overdue'?'var(--red)':'var(--t2)',danger:tuitionStatus==='overdue'},
+      {icon:'💬',label:'Messages',sub:unread?unread+' unread message'+(unread>1?'s':''):'All caught up',nav:'parentMsgs',accent:unread?'var(--gold)':'var(--t2)',badge:unread},
+      {icon:'📄',label:'Documents',sub:docs.length+' shared with you',nav:'parentDocuments',accent:'var(--t2)'},
+    ].map(t=>`<div onclick="window.K.nav('${t.nav}')" style="background:var(--panel);border:1px solid ${t.danger?'rgba(155,58,47,0.3)':'var(--bdr)'};border-top:3px solid ${t.accent==='var(--gold)'||t.accent==='#5EC85E'||t.badge?t.accent:'var(--bdr)'};border-radius:12px;padding:18px 16px;cursor:pointer;position:relative;transition:all 0.15s;box-shadow:0 1px 4px rgba(0,0,0,0.04);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='';this.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'">
+      ${t.badge?`<div style="position:absolute;top:10px;right:10px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;font-family:'Barlow Condensed',sans-serif;">${t.badge}</div>`:''}
+      <div style="font-size:26px;margin-bottom:10px;">${t.icon}</div>
+      <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;margin-bottom:4px;">${t.label}</div>
+      <div style="font-size:12px;color:${t.danger?'var(--red)':t.accent==='var(--t2)'?'var(--t2)':t.accent};font-weight:${t.badge||t.danger?600:400};">${t.sub}</div>
+    </div>`).join('')}
   </div>`;
 }
 
 export function parentSkills(){
-  const aths=APP.parentAthletes||[];
-  const idx=APP.parentAthIdx||0;
-  const ath=aths[idx];
-  if(!ath)return`<div class="empty-state"><div class="es-icon">🥋</div><h3>No athlete linked yet</h3></div>`;
+  const aths=APP.parentAthletes||[];const idx=APP.parentAthIdx||0;const ath=aths[idx];
+  if(!ath)return`<div class="empty-state"><div class="es-icon">🥋</div><h3>No athlete linked</h3></div>`;
   const skills=SKILLS.filter(s=>s.level===(ath.level||'Level 1'));
   const skillMap=APP.parentSkillData?.[ath.id]||{};
   const events=[...new Set(skills.map(s=>s.event))];
   const mastered=skills.filter(s=>skillMap[s.id]==='m').length;
   const pct=skills.length?Math.round(mastered/skills.length*100):0;
+  const evColors={Vault:'#C25B30',Bars:'#2E5FA3',Beam:'#7B4FA0',Floor:'#2A6B2A',General:'#B5996A'};
   const updated=APP.parentSkillUpdated?.[ath.id];
-  return `
+  return`
   ${switcher(idx,'parentSkills')}
-  <div class="sec-hdr"><h3>Skill Progress — ${ath.name.split(' ')[0]}</h3>${updated?`<span style="font-size:11px;color:var(--t3);">Updated ${new Date(updated+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>`:''}</div>
-  <div class="progress-hero">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:32px;color:var(--gold);">${pct}%</div><div style="font-size:12px;color:var(--t3);">Overall Progress — ${ath.level||'Level 1'}</div></div>
-      <div style="text-align:right;"><div style="font-size:13px;font-weight:700;color:var(--green);">${mastered} Mastered</div><div style="font-size:12px;color:var(--t2);">${skills.filter(s=>skillMap[s.id]==='ip').length} In Progress</div><div style="font-size:12px;color:var(--t3);">${skills.filter(s=>!skillMap[s.id]||skillMap[s.id]==='nr').length} Not Started</div></div>
+  <div style="background:linear-gradient(135deg,#1C1C1C,#242424);border-radius:14px;padding:20px 24px;margin-bottom:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:#FAFAF8;">${ath.name}'s Skills</div><div style="font-size:12px;color:rgba(250,250,248,0.4);margin-top:3px;">${ath.level||'Level 1'}${updated?` · Updated ${new Date(updated+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`:''}</div></div>
+      <div style="text-align:right;"><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:36px;color:var(--gold);line-height:1;">${pct}%</div><div style="font-size:10px;color:rgba(250,250,248,0.35);text-transform:uppercase;letter-spacing:1px;">progress</div></div>
     </div>
-    <div class="prog-bar" style="height:8px;border-radius:4px;"><div class="prog-fill" style="width:${pct}%;border-radius:4px;"></div></div>
+    <div style="height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;margin-bottom:12px;"><div style="height:100%;border-radius:4px;background:linear-gradient(90deg,var(--gold),#C8AE86);width:${pct}%;transition:width 1s ease;"></div></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+      ${[{v:mastered,l:'Mastered',c:'#5EC85E'},{v:skills.filter(s=>skillMap[s.id]==='ip').length,l:'In Progress',c:'#F59E0B'},{v:skills.filter(s=>!skillMap[s.id]||skillMap[s.id]==='nr').length,l:'Not Yet',c:'rgba(250,250,248,0.3)'}].map(s=>`<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:${s.c};">${s.v}</div><div style="font-size:10px;color:rgba(250,250,248,0.35);margin-top:2px;">${s.l}</div></div>`).join('')}
+    </div>
   </div>
   ${events.map(evt=>{
-    const es=skills.filter(s=>s.event===evt);
-    const em=es.filter(s=>skillMap[s.id]==='m').length;
-    return`<div class="card" style="margin-bottom:14px;">
-      <div class="card-hdr"><h4>${{Vault:'🏃 Vault',Bars:'🤸 Bars',Beam:'🧘 Beam',Floor:'⭐ Floor',General:'🥋 General'}[evt]||evt}</h4><span style="font-size:12px;color:var(--t3);">${em}/${es.length}</span></div>
-      <div class="card-body">${es.map(sk=>{const st=skillMap[sk.id]||'nr';return`<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--bdr2);">
+    const es=skills.filter(s=>s.event===evt);const em=es.filter(s=>skillMap[s.id]==='m').length;const col=evColors[evt]||'var(--gold)';
+    return`<div style="background:var(--panel);border:1px solid var(--bdr);border-top:3px solid ${col};border-radius:12px;overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+      <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;background:var(--p2);border-bottom:1px solid var(--bdr);">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;">${{Vault:'🏃 Vault',Bars:'🤸 Bars',Beam:'🧘 Beam',Floor:'⭐ Floor',General:'🥋 General'}[evt]||evt}</div>
+        <div style="display:flex;align-items:center;gap:8px;"><div style="width:60px;height:4px;background:var(--bg);border-radius:2px;overflow:hidden;"><div style="height:100%;border-radius:2px;background:${col};width:${Math.round(em/es.length*100)}%;"></div></div><span style="font-size:11px;font-weight:700;color:var(--t3);">${em}/${es.length}</span></div>
+      </div>
+      <div>${es.map(sk=>{const st=skillMap[sk.id]||'nr';const statusDef={m:{bg:'var(--g-soft)',c:'var(--green)',border:'rgba(42,107,42,0.3)',icon:'✓',label:'Mastered'},ip:{bg:'var(--y-soft)',c:'#8A6010',border:'rgba(181,130,30,0.3)',icon:'~',label:'In Progress'},nr:{bg:'rgba(0,0,0,0.03)',c:'var(--t3)',border:'var(--bdr)',icon:'—',label:'Not Yet'}};const def=statusDef[st]||statusDef.nr;return`<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--bdr2);">
         <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${sk.name}</div></div>
-        <div style="display:flex;align-items:center;gap:6px;"><div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;${st==='m'?'background:var(--g-soft);color:var(--green);border:1.5px solid rgba(42,107,42,0.3);':st==='ip'?'background:var(--y-soft);color:#8A6010;border:1.5px solid rgba(181,130,30,0.3);':'background:rgba(0,0,0,0.04);color:var(--t3);border:1.5px solid var(--bdr);'}">${st==='m'?'✓':st==='ip'?'~':'—'}</div><span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${st==='m'?'var(--green)':st==='ip'?'#8A6010':'var(--t3)'};">${st==='m'?'Mastered':st==='ip'?'In Progress':'Not Ready'}</span></div>
-      </div>`}).join('')}</div>
+        <div style="display:flex;align-items:center;gap:7px;"><div style="width:30px;height:30px;border-radius:50%;background:${def.bg};border:1.5px solid ${def.border};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:${def.c};">${def.icon}</div><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${def.c};">${def.label}</span></div>
+      </div>`;}).join('')}</div>
     </div>`;
   }).join('')}`;
 }
@@ -79,19 +91,21 @@ export function parentSkills(){
 export function parentTuition(){
   const aths=APP.parentAthletes||[];
   const total=aths.reduce((s,a)=>s+(a.tuitionAmount||185),0);
-  return `
-  <div class="sec-hdr"><h3>Tuition</h3></div>
-  <div class="stats2" style="margin-bottom:20px;">
-    <div class="stat"><div class="sl">Monthly Total</div><div class="sv gold">$${total}</div></div>
-    <div class="stat"><div class="sl">Status</div><div class="sv" style="font-size:18px;">${aths[0]?.tuitionStatus==='paid'?'✓ Paid':aths[0]?.tuitionStatus==='overdue'?'⚠️ Overdue':'Pending'}</div></div>
+  const status=aths[0]?.tuitionStatus||'pending';
+  return`
+  <div style="background:linear-gradient(135deg,#1C1C1C,#242424);border-radius:16px;padding:24px;margin-bottom:20px;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(181,153,106,0.5);margin-bottom:6px;">Monthly Total</div>
+    <div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:44px;color:${status==='paid'?'#5EC85E':status==='overdue'?'#FF8A80':'var(--gold)'};letter-spacing:-1px;margin-bottom:8px;">$${total.toLocaleString()}</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:10px;height:10px;border-radius:50%;background:${status==='paid'?'#5EC85E':status==='overdue'?'var(--red)':'var(--gold)'}"></div>
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(250,250,248,0.5);">${status==='paid'?'Paid — Thank you!':status==='overdue'?'Payment Overdue':'Payment Pending'}</span>
+    </div>
   </div>
-  <div class="card"><div class="card-body">
-    ${aths.map(a=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--bdr2);">
-      <div style="display:flex;align-items:center;gap:10px;"><div class="mini-av">${ini(a.name)}</div><div><div style="font-size:14px;font-weight:700;">${a.name}</div><div style="font-size:12px;color:var(--t2);">${a.billingCycle||'Monthly'} · ${a.level||'Level 1'}</div></div></div>
-      <div style="text-align:right;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;">$${a.tuitionAmount||185}</div><span class="pill ${a.tuitionStatus==='paid'?'present':a.tuitionStatus==='overdue'?'absent':'gold-p'}">${a.tuitionStatus||'Pending'}</span></div>
-    </div>`).join('')}
-  </div></div>
-  <div class="alert info">Questions about your account? Send a message to your director.</div>`;
+  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">${aths.map(a=>`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:12px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+    <div style="display:flex;align-items:center;gap:12px;"><div class="mini-av" style="width:40px;height:40px;font-size:14px;">${ini(a.name)}</div><div><div style="font-size:15px;font-weight:700;">${a.name}</div><div style="font-size:12px;color:var(--t2);margin-top:2px;">${a.billingCycle||'Monthly'} · ${a.level||'Level 1'}</div></div></div>
+    <div style="text-align:right;"><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:20px;">$${a.tuitionAmount||185}</div><span class="pill ${a.tuitionStatus==='paid'?'present':a.tuitionStatus==='overdue'?'absent':'gold-p'}" style="margin-top:4px;">${a.tuitionStatus||'Pending'}</span></div>
+  </div>`).join('')}</div>
+  <div class="alert info" style="font-size:13px;">Questions about your balance? Send a message to your director and they'll get back to you.</div>`;
 }
 
 export function parentMsgs(){
@@ -102,53 +116,37 @@ export function parentMsgs(){
   const readM=all.filter(m=>(m.read||m.fromId===uid)&&m.fromId!=='system');
   const sent=all.filter(m=>m.fromId===uid);
   const display=tab==='sent'?sent:tab==='read'?readM:inbox;
-  return `
+  return`
   <div class="sec-hdr"><h3>Messages</h3><button class="btn primary" onclick="window.K.openModal('newMsgModal',{role:'parent'})">+ New</button></div>
-  <div class="tab-bar">
-    ${[['unread',`Inbox${inbox.length?` (${inbox.length})`:''}`,],['read','Read'],['sent','Sent']].map(([t,l])=>`<button class="tab-btn ${tab===t?'on':''}" onclick="window.APP.msgTab='${t}';window.K.nav('parentMsgs')">${l}</button>`).join('')}
-  </div>
-  ${msgInboxRender(display,'parent')}`;
+  <div class="tab-bar">${[['unread',`Inbox${inbox.length?` (${inbox.length})`:''}`,],['read','Read'],['sent','Sent']].map(([t,l])=>`<button class="tab-btn ${tab===t?'on':''}" onclick="window.APP.msgTab='${t}';window.K.nav('parentMsgs')">${l}</button>`).join('')}</div>
+  ${display.length===0?`<div class="empty-state compact"><div class="es-icon">📬</div><h3>${tab==='unread'?'No new messages':'Nothing here yet'}</h3></div>`
+  :msgList(display,uid,'parent')}`;
 }
 
 export function parentDocuments(){
-  const aths=APP.parentAthletes||[];
-  const idx=APP.parentAthIdx||0;
-  const ath=aths[idx];
-  const docs=(APP.allDocuments||[]).filter(d=>{
-    if(d.sharedWith==='all')return true;
-    if(d.sharedWith==='athlete'&&ath&&(d.sharedWithIds||[]).includes(ath.id))return true;
-    if(d.sharedWith==='class'&&ath){
-      const myClasses=(APP.allClasses||[]).filter(c=>(c.athletes||[]).includes(ath.id));
-      return myClasses.some(c=>(d.sharedWithIds||[]).includes(c.id));
-    }
-    return false;
-  }).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
-  const icons={'pdf':'📄','image':'🖼️','video':'🎥','form':'📋','other':'📎'};
-  return `
+  const aths=APP.parentAthletes||[];const idx=APP.parentAthIdx||0;const ath=aths[idx];
+  const docs=(APP.allDocuments||[]).filter(d=>{if(d.sharedWith==='all')return true;if(d.sharedWith==='athlete'&&ath&&(d.sharedWithIds||[]).includes(ath.id))return true;if(d.sharedWith==='class'&&ath){const myClasses=(APP.allClasses||[]).filter(c=>(c.athletes||[]).includes(ath.id));return myClasses.some(c=>(d.sharedWithIds||[]).includes(c.id));}return false;}).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  const icons={'pdf':'📄','image':'🖼️','video':'🎥','form':'📋','link':'🔗','other':'📎'};
+  const typeColors={'pdf':'rgba(220,38,38,0.1)','image':'rgba(59,130,246,0.1)','video':'rgba(124,58,237,0.1)','form':'rgba(16,185,129,0.1)','link':'rgba(245,158,11,0.1)','other':'rgba(107,114,128,0.1)'};
+  return`
   ${switcher(idx,'parentDocuments')}
   <div class="sec-hdr"><h3>Documents</h3></div>
-  ${docs.length===0?`<div class="empty-state"><div class="es-icon">📄</div><h3>No documents yet</h3><p>Your gym director will share documents here — forms, schedules, and more.</p></div>`
-  :`<div class="card"><div class="card-body">${docs.map(d=>`<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--bdr2);cursor:pointer;" onclick="window.open('${d.fileUrl||'#'}','_blank')">
-    <div style="width:44px;height:44px;border-radius:10px;background:rgba(181,153,106,0.1);border:1px solid rgba(181,153,106,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${icons[d.fileType||'other']||'📎'}</div>
-    <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.name||'Document'}</div>
-    <div style="font-size:12px;color:var(--t2);margin-top:3px;">${d.description||''}</div>
-    <div style="font-size:11px;color:var(--t3);margin-top:3px;">${d.createdAt?new Date(d.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}</div></div>
-    <span style="color:var(--gold);font-size:18px;">→</span>
-  </div>`).join('')}</div></div>`}`;
+  ${docs.length===0?`<div class="empty-state"><div class="es-icon">📄</div><h3>No documents yet</h3><p>Your gym will share forms, schedules, and important documents here.</p></div>`
+  :`<div style="display:flex;flex-direction:column;gap:8px;">${docs.map(d=>`<div onclick="${d.fileUrl?`window.open('${d.fileUrl}','_blank')`:'return'}" style="background:var(--panel);border:1px solid var(--bdr);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;${d.fileUrl?'cursor:pointer;':''}transition:all 0.15s;box-shadow:0 1px 4px rgba(0,0,0,0.04);" onmouseover="${d.fileUrl?"this.style.boxShadow='0 6px 20px rgba(0,0,0,0.1)';this.style.borderColor='var(--gold)'":""}" onmouseout="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)';this.style.borderColor='var(--bdr)'">
+    <div style="width:48px;height:48px;border-radius:12px;background:${typeColors[d.fileType||'other']||'rgba(107,114,128,0.1)'};display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">${icons[d.fileType||'other']||'📎'}</div>
+    <div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.name||'Document'}</div>
+    ${d.description?`<div style="font-size:12px;color:var(--t2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${d.description}</div>`:''}
+    <div style="font-size:11px;color:var(--t3);margin-top:5px;">${d.createdAt?new Date(d.createdAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):''}</div></div>
+    ${d.fileUrl?`<div style="color:var(--gold);font-size:20px;flex-shrink:0;">↗</div>`:''}
+  </div>`).join('')}</div>`}`;
 }
 
-function msgInboxRender(msgs,role){
-  const uid=window.APP?.user?.uid||'';
-  if(!msgs||msgs.length===0)return`<div class="empty-state"><div class="es-icon">${role==='parent'?'📬':'📭'}</div><h3>Nothing here yet</h3></div>`;
-  return`<div class="card"><div class="card-body">${msgs.map(m=>{
-    const isMine=m.fromId===uid;const isUnread=!m.read&&!isMine;
-    const all=window.APP?.messages||[];const idx=all.findIndex(x=>x===m||x.id===m.id);
-    return`<div style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--bdr2);cursor:pointer;${isUnread?'background:rgba(181,153,106,0.04);':''}" onclick="window.K.openModal('msgViewModal',{idx:${idx},role:'${role}'})">
-      <div class="mini-av" style="${isUnread?'background:linear-gradient(135deg,var(--gold),#7A5A2A);color:var(--sb);':''}">${ini(m.from||'?')}</div>
-      <div style="flex:1;min-width:0;"><div style="display:flex;justify-content:space-between;"><span style="font-size:13px;font-weight:${isUnread?700:500};">${isMine?'→ Director':m.from||'Unknown'}</span><span style="font-size:11px;color:var(--t3);">${m.time||''}</span></div>
-      <div style="font-size:13px;font-weight:${isUnread?600:400};margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.subject||''}</div>
-      <div style="font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.preview||m.body||''}</div></div>
-      ${isUnread?`<div style="width:7px;height:7px;border-radius:50%;background:var(--gold);flex-shrink:0;margin-top:6px;"></div>`:''}
-    </div>`;
-  }).join('')}</div></div>`;
+function msgList(msgs,uid,role){
+  return`<div style="display:flex;flex-direction:column;gap:6px;">${msgs.map(m=>{const isMine=m.fromId===uid;const isUnread=!m.read&&!isMine;const all=window.APP?.messages||[];const idx=all.findIndex(x=>x===m||x.id===m.id);return`<div onclick="window.K.openModal('msgViewModal',{idx:${idx},role:'${role}'})" style="background:var(--panel);border:1px solid var(--bdr);border-left:3px solid ${isUnread?'var(--gold)':'transparent'};border-radius:10px;padding:14px 16px;cursor:pointer;display:flex;align-items:flex-start;gap:12px;transition:all 0.15s;box-shadow:0 1px 4px rgba(0,0,0,0.04);" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'" onmouseout="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)'">
+    <div class="mini-av" style="${isUnread?'background:linear-gradient(135deg,var(--gold),#7A5A2A);color:var(--sb);':''}">${ini(m.from||'?')}</div>
+    <div style="flex:1;min-width:0;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;"><span style="font-size:13px;font-weight:${isUnread?700:500};">${isMine?'You →':m.from||'Unknown'}</span><span style="font-size:11px;color:var(--t3);">${m.time||''}</span></div>
+    <div style="font-size:13px;font-weight:${isUnread?600:400};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.subject||''}</div>
+    <div style="font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;">${m.preview||m.body||''}</div></div>
+    ${isUnread?`<div style="width:8px;height:8px;border-radius:50%;background:var(--gold);flex-shrink:0;margin-top:4px;"></div>`:''}
+  </div>`;}).join('')}</div>`;
 }
