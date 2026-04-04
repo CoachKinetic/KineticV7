@@ -105,21 +105,22 @@ async function loadParentData(){
   if(APP.role!=='parent'||!APP.gymId)return;
   APP.parentSkillData={};APP.parentSkillUpdated={};APP.parentAttendance={};APP.parentCharges=[];
 
-  // Also try lowercase email match for athletes
-  const email=APP.user?.email||'';
+  // Try email match (exact then lowercase)
   if(!APP.parentAthletes||APP.parentAthletes.length===0){
     try{
-      const pa=await getDocs(query(collection(db,'athletes'),where('parentEmail','==',email.toLowerCase())));
-      if(!pa.empty)APP.parentAthletes=pa.docs.map(d=>({id:d.id,...d.data()}));
-    }catch(e){}
+      const email=APP.user?.email||'';
+      let pa=await getDocs(query(collection(db,'athletes'),where('parentEmail','==',email)));
+      if(pa.empty)pa=await getDocs(query(collection(db,'athletes'),where('parentEmail','==',email.toLowerCase())));
+      if(!pa.empty){APP.parentAthletes=pa.docs.map(d=>({id:d.id,...d.data()}));}
+    }catch(e){console.warn('parent ath load',e);}
   }
   if(!APP.parentAthletes||APP.parentAthletes.length===0)return;
 
-  // Load charges for this parent's athletes
-  try{
-    const ids=APP.parentAthletes.map(a=>a.id);
-    APP.parentCharges=(APP.allCharges||[]).filter(c=>ids.includes(c.athId)||c.athId==='all');
-  }catch(e){}
+  // Charges for parent's athletes
+  const ids=APP.parentAthletes.map(a=>a.id);
+  APP.parentCharges=(APP.allCharges||[]).filter(c=>ids.includes(c.athId)||c.athId==='all');
+
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
   for(const ath of APP.parentAthletes){
     APP.parentSkillData[ath.id]={};
@@ -127,50 +128,48 @@ async function loadParentData(){
     const myClasses=(APP.allClasses||[]).filter(c=>(c.athletes||[]).includes(ath.id));
 
     for(const cls of myClasses){
-      // ── Skills ──
-      try{
-        const skillSnap=await getDocs(query(collection(db,'skills'),where('classId','==',cls.id)));
-        let latest='',best={};
-        skillSnap.docs.forEach(d=>{const dat=d.data();if((dat.date||'')>latest){latest=dat.date;best=dat.skills||{};}});
-        if(latest){
-          // skills stored as {athleteIndex: {skillId: status}}
-          const athIdx=(cls.athletes||[]).indexOf(ath.id);
-          const byIdx=athIdx>-1&&best[athIdx]?best[athIdx]:{};
-          // Also try by athId directly (newer format)
-          const byId=best[ath.id]||{};
-          APP.parentSkillData[ath.id]=Object.assign({},APP.parentSkillData[ath.id],byIdx,byId);
-          APP.parentSkillUpdated[ath.id]=latest;
-        }
-      }catch(e){console.warn('skill load',e);}
 
-      // ── Attendance ── generate expected doc IDs for last 12 weeks
+      // ── Skills: read skillsSummary/{classId} — direct doc fetch, no index needed ──
       try{
-        const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const ss=await getDoc(doc(db,'skillsSummary/'+cls.id));
+        if(ss.exists()){
+          const sd=ss.data();
+          const byAth=(sd.byAthId||{});
+          if(byAth[ath.id]&&Object.keys(byAth[ath.id]).length>0){
+            APP.parentSkillData[ath.id]=Object.assign(APP.parentSkillData[ath.id]||{},byAth[ath.id]);
+            APP.parentSkillUpdated[ath.id]=sd.dateStr||sd.updatedAt?.split('T')[0]||'';
+          }
+        }
+      }catch(e){console.warn('skill summary read',e);}
+
+      // ── Attendance: fetch last 12 class sessions by day-of-week ──
+      try{
         const target=days.indexOf(cls.day);
         if(target<0)continue;
         let present=0,total=0,sessions=[];
         const now=new Date();
         for(let w=0;w<12;w++){
           const d=new Date(now);
-          const diff=((now.getDay()-target)+7)%7;
-          d.setDate(now.getDate()-diff-w*7);
+          const diffDays=((now.getDay()-target)+7)%7;
+          d.setDate(now.getDate()-diffDays-w*7);
           if(d>now)continue;
           const dateStr=d.toISOString().split('T')[0];
           try{
             const s=await getDoc(doc(db,'attendance/'+dateStr+'_'+cls.id));
             if(s.exists()){
               const dat=s.data();total++;
-              const isPresent=(dat.presentIds||[]).includes(ath.id)||(dat.makeupIds||[]).includes(ath.id);
-              if(isPresent)present++;
-              sessions.push({date:dateStr,status:isPresent?'present':'absent'});
+              const wasPresent=(dat.presentIds||[]).includes(ath.id)||(dat.makeupIds||[]).includes(ath.id);
+              if(wasPresent)present++;
+              sessions.push({date:dateStr,status:wasPresent?'present':'absent'});
             }
           }catch(e){}
         }
         APP.parentAttendance[ath.id][cls.id]={total,present,absent:total-present,sessions};
-      }catch(e){console.warn('att load',e);}
+      }catch(e){console.warn('att load',cls.id,e);}
     }
   }
 }
+
 
 function showAuth(){hide('loadingScreen');show('authScreen');hide('obScreen');hide('appShell');}
 function showOb(){hide('loadingScreen');hide('authScreen');show('obScreen');hide('appShell');renderOb(1);}
@@ -330,7 +329,15 @@ function render(){
 window.render=render;
 
 const K=window.K={
-nav(v){_moreOpen=false;const panel=$('mobMorePanel');if(panel)panel.classList.remove('open');APP.view=v;renderNav();render();if(v==='dirAttendance')K.loadAttendanceRecords();},
+nav(v){
+  _moreOpen=false;const panel=$('mobMorePanel');if(panel)panel.classList.remove('open');
+  APP.view=v;renderNav();render();
+  if(v==='dirAttendance')K.loadAttendanceRecords();
+  // Refresh parent data when parent navigates — keeps portal live
+  if(APP.role==='parent'&&['parentHome','parentSkills','parentTuition','parentDocuments'].includes(v)){
+    loadParentData().then(()=>{if(APP.view===v)render();});
+  }
+},
 toggleSimple(){APP.simpleMode=!APP.simpleMode;renderNav();render();toast(APP.simpleMode?'Simple Mode ON':'Simple Mode OFF');},
 toggleMobMore(){_moreOpen=!_moreOpen;const panel=$('mobMorePanel');if(panel)panel.classList.toggle('open',_moreOpen);renderMobileNav();},
 switchTab(t){$('inForm').style.display=t==='in'?'block':'none';$('upForm').style.display=t==='up'?'block':'none';$('siTab').classList.toggle('on',t==='in');$('suTab').classList.toggle('on',t==='up');},
@@ -386,23 +393,79 @@ setAtt(clsIdx,athIdx,status){if(!APP.attState[clsIdx])APP.attState[clsIdx]={};AP
 markAll(clsId,status){const cls=APP.allClasses.find(c=>c.id===clsId);APP.allAthletes.filter(a=>(cls?.athletes||[]).includes(a.id)).forEach((_,i)=>K.setAtt(clsId,i,status));},
 async saveAtt(clsId){sync(true);const cls=APP.allClasses.find(c=>c.id===clsId);const aths=APP.allAthletes.filter(a=>(cls?.athletes||[]).includes(a.id));const state=APP.attState[clsId]||{};const presentIds=aths.filter((_,i)=>state[i]!=='absent').map(a=>a.id);const absentIds=aths.filter((_,i)=>state[i]==='absent').map(a=>a.id);const today=new Date().toISOString().split('T')[0];try{await setDoc(doc(db,`attendance/${today}_${clsId}`),{date:today,attendance:state,presentIds,absentIds,coachId:APP.user.uid,classId:clsId,className:cls?.name||'',gymId:APP.gymId||null,updatedAt:new Date().toISOString()},{merge:true});if(!APP.attSavedClasses)APP.attSavedClasses={};APP.attSavedClasses[clsId]=true;if(!APP.sessionState)APP.sessionState={};if(!APP.sessionState[clsId])APP.sessionState[clsId]={};APP.sessionState[clsId].attDone=true;APP.attSaved=true;sync(false);toast('✓ Attendance saved ✅');render();}catch(e){sync(false);toast('⚠️ '+e.message,'warn');}},
 setSkill(ai,skid,status){if(!APP.skillState[ai])APP.skillState[ai]={};APP.skillState[ai][skid]=status;document.querySelectorAll(`[data-skill="${ai}_${skid}"]`).forEach(btn=>{const s=btn.dataset.status;btn.className='ssb'+(s===status?s==='nr'?' sel-nr':s==='ip'?' sel-ip':' sel-m':'');});const cls=APP.selectedClass||{level:'Level 1'};const ls=(window._SKILLS||[]).filter(s=>s.level===cls.level);const m=ls.filter(s=>APP.skillState[ai][s.id]==='m').length;const pct=ls.length?Math.round(m/ls.length*100):0;const bar=document.getElementById(`spb${ai}`),pctEl=document.getElementById(`spp${ai}`);if(bar)bar.style.width=pct+'%';if(pctEl)pctEl.textContent=pct+'%';},
-async saveSkills(){sync(true);try{await setDoc(doc(db,`skills/${APP.user.uid}_${new Date().toISOString().split('T')[0]}_${APP.activeSkillClass||'gen'}`),{date:new Date().toISOString(),skills:APP.skillState,coachId:APP.user.uid,classId:APP.activeSkillClass||null,gymId:APP.gymId||null},{merge:true});if(!APP.sessionState)APP.sessionState={};if(!APP.sessionState[APP.activeSkillClass||'gen'])APP.sessionState[APP.activeSkillClass||'gen']={};APP.sessionState[APP.activeSkillClass||'gen'].skillsDone=true;sync(false);toast('✓ Skills saved ☁️');}catch(e){sync(false);toast('⚠️ '+e.message,'warn');}},
-async saveNotes(){const cn=$('cnTa'),inn=$('inTa');if(cn)APP.classNotes=cn.value;if(inn)APP.issueNotes=inn.value;sync(true);try{await setDoc(doc(db,`notes/${APP.user.uid}_${new Date().toISOString().split('T')[0]}_${APP.activeSkillClass||'gen'}`),{date:new Date().toISOString(),classNotes:APP.classNotes,issueNotes:APP.issueNotes,privateNotes:APP.privateNotes||{},coachId:APP.user.uid,classId:APP.activeSkillClass||null,gymId:APP.gymId||null},{merge:true});APP.notesSaved=true;if(!APP.notesHistory)APP.notesHistory={};APP.notesHistory[new Date().toISOString().split('T')[0]+'_'+(APP.activeSkillClass||'gen')]={classNotes:APP.classNotes,issueNotes:APP.issueNotes,privateNotes:APP.privateNotes||{},date:new Date().toISOString()};if(!APP.sessionState)APP.sessionState={};if(!APP.sessionState[APP.activeSkillClass||'gen'])APP.sessionState[APP.activeSkillClass||'gen']={};APP.sessionState[APP.activeSkillClass||'gen'].notesDone=true;sync(false);toast('✓ Notes saved ☁️');render();}catch(e){sync(false);toast('⚠️ '+e.message,'warn');}},
+async saveSkills(){
+  if(!APP.activeSkillClass){toast('Select a class first','warn');return;}
+  sync(true);
+  try{
+    const cls=APP.allClasses.find(c=>c.id===APP.activeSkillClass);
+    const aths=APP.allAthletes.filter(a=>(cls?.athletes||[]).includes(a.id));
+    const dateStr=new Date().toISOString().split('T')[0];
+    // Build by-index data (for coach UI)
+    const byIndex={};
+    aths.forEach((_,i)=>{if(APP.skillState[i])byIndex[i]=APP.skillState[i];});
+    // Build by-athleteId data (for parent portal — NO index needed)
+    const byAthId={};
+    aths.forEach((a,i)=>{if(APP.skillState[i])byAthId[a.id]=APP.skillState[i];});
+
+    // 1. Save full session record
+    await setDoc(doc(db,'skills/'+APP.user.uid+'_'+dateStr+'_'+APP.activeSkillClass),
+      {date:new Date().toISOString(),dateStr,skills:byIndex,coachId:APP.user.uid,
+       classId:APP.activeSkillClass,gymId:APP.gymId||null,updatedAt:new Date().toISOString()},
+      {merge:true});
+
+    // 2. Save summary doc at skills_summary/{classId} — direct read, no query needed
+    await setDoc(doc(db,'skillsSummary/'+APP.activeSkillClass),
+      {byAthId,dateStr,updatedAt:new Date().toISOString(),classId:APP.activeSkillClass,
+       coachId:APP.user.uid,gymId:APP.gymId||null,level:cls?.level||''},
+      {merge:true});
+
+    if(!APP.sessionState)APP.sessionState={};
+    if(!APP.sessionState[APP.activeSkillClass])APP.sessionState[APP.activeSkillClass]={};
+    APP.sessionState[APP.activeSkillClass].skillsDone=true;
+    sync(false);toast('✓ Skills saved ☁️');
+  }catch(e){sync(false);toast('⚠️ '+e.message,'warn');}
+},
+async saveNotes(){
+  const cn=$('cnTa'),inn=$('inTa');
+  if(cn)APP.classNotes=cn.value;
+  if(inn)APP.issueNotes=inn.value;
+  const classId=APP.notesClassId||APP.activeSkillClass||'gen';
+  APP.notesClassId=classId;
+  const dateStr=new Date().toISOString().split('T')[0];
+  sync(true);
+  try{
+    const cls=APP.allClasses.find(c=>c.id===classId);
+    await setDoc(doc(db,'notes/'+APP.user.uid+'_'+dateStr+'_'+classId),
+      {date:new Date().toISOString(),dateStr,classNotes:APP.classNotes,issueNotes:APP.issueNotes,
+       privateNotes:APP.privateNotes||{},coachId:APP.user.uid,
+       classId:classId==='gen'?null:classId,
+       classDay:cls?.day||null,gymId:APP.gymId||null},
+      {merge:true});
+    APP.notesSaved=true;
+    if(!APP.notesHistory)APP.notesHistory={};
+    APP.notesHistory[dateStr+'_'+classId]={classNotes:APP.classNotes,issueNotes:APP.issueNotes,privateNotes:APP.privateNotes||{},date:new Date().toISOString()};
+    if(!APP.sessionState)APP.sessionState={};
+    if(!APP.sessionState[classId])APP.sessionState[classId]={};
+    APP.sessionState[classId].notesDone=true;
+    sync(false);toast('✓ Notes saved ☁️');render();
+  }catch(e){sync(false);toast('⚠️ '+e.message,'warn');}
+},
 startSession(classId){const cls=APP.allClasses.find(c=>c.id===classId);if(!cls)return;if(!APP.clockedIn){toast('Clock in first','warn');return;}APP.activeSkillClass=classId;APP.selectedClass={...cls,athleteObjects:APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id))};if(!APP.attState[classId]){APP.attState[classId]={};APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).forEach((_,i)=>{APP.attState[classId][i]='present';});}const st=APP.sessionState?.[classId]||{};APP.view=st.skillsDone?'coachNotes':st.attDone?'coachSkills':'coachAtt';if(APP.view==='coachAtt')APP.attDay=cls.day;renderNav();render();},
 startSkills(classId){APP.activeSkillClass=classId;const cls=APP.allClasses.find(c=>c.id===classId);if(cls)APP.selectedClass={...cls,athleteObjects:APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id))};APP.view='coachSkills';renderNav();render();},
 async loadNotesHistory(date,classId){
+  const cid=classId||APP.notesClassId||APP.activeSkillClass||'gen';
   try{
-    const s=await getDoc(doc(db,'notes/'+APP.user.uid+'_'+date+'_'+(classId||'gen')));
+    const s=await getDoc(doc(db,'notes/'+APP.user.uid+'_'+date+'_'+cid));
     if(!APP.notesHistory)APP.notesHistory={};
     if(s.exists()){
       const d=s.data();
-      APP.notesHistory[date+'_'+(classId||'gen')]=d;
-      APP.classNotes=d.classNotes||'';APP.issueNotes=d.issueNotes||'';APP.privateNotes=d.privateNotes||{};
+      APP.notesHistory[date+'_'+cid]=d;
     }else{
-      APP.notesHistory[date+'_'+(classId||'gen')]=null;
-      APP.classNotes='';APP.issueNotes='';APP.privateNotes={};
+      APP.notesHistory[date+'_'+cid]=null;
     }
-    APP.notesViewDate=date;render();
+    APP.notesViewDate=date;
+    APP.notesClassId=cid;
+    render();
   }catch(e){render();}
 },
 clockIn(){K.doClockIn();},
@@ -499,26 +562,39 @@ async denyMakeupRequest(id){
     toast('Denied — parent notified');render();
   }catch(e){toast('⚠️ '+e.message,'warn');}
 },
-async loadLastClassNotes(){
+async refreshParentData(){
+  if(APP.role!=='parent')return;
+  toast('Refreshing data...');
+  APP.parentSkillData={};APP.parentSkillUpdated={};APP.parentAttendance={};APP.parentCharges=[];
+  await loadParentData();
+  toast('✓ Updated!');render();
+},
+async loadLastClassNotes(targetClassId){
   const uid=APP.user?.uid;
-  const classId=APP.activeSkillClass||'gen';
-  // Scan back up to 28 days for most recent notes entry
-  for(let i=1;i<=28;i++){
+  const classId=targetClassId||APP.notesClassId||APP.activeSkillClass||null;
+  if(!classId){toast('No class selected','warn');return;}
+  const cls=APP.allClasses.find(c=>c.id===classId);
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const targetDay=cls?.day?days.indexOf(cls.day):-1;
+  let checked=0;
+  for(let i=1;i<=60&&checked<12;i++){
     const d=new Date();d.setDate(d.getDate()-i);
+    if(targetDay>=0&&d.getDay()!==targetDay)continue;
+    checked++;
     const dateStr=d.toISOString().split('T')[0];
     try{
       const s=await getDoc(doc(db,'notes/'+uid+'_'+dateStr+'_'+classId));
-      if(s.exists()){
+      if(s.exists()&&s.data().classNotes?.trim()){
         const dat=s.data();
         if(!APP.notesHistory)APP.notesHistory={};
         APP.notesHistory[dateStr+'_'+classId]=dat;
-        APP.notesViewDate=dateStr;
-        toast(`✓ Loaded notes from ${new Date(dateStr+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`);
+        APP.notesViewDate=dateStr;APP.notesClassId=classId;
+        toast('✓ Notes from '+new Date(dateStr+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}));
         render();return;
       }
     }catch(e){}
   }
-  toast('No previous notes found for this class','warn');
+  toast('No previous notes found','warn');
 },
 async loadCoachAttHistory(){
   const uid=APP.user?.uid;
@@ -637,6 +713,7 @@ function buildEditCoachForm(c){
 }
 
 window._SKILLS=SKILLS;
+window.loadParentData=loadParentData;
 window._db_getDoc=getDoc;
 window._db_doc=doc;
 window._db=db;

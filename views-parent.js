@@ -73,6 +73,10 @@ export function parentHome(){
     </div>
   </div>
 
+  <!-- Refresh button -->
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+    <button onclick="window._parentRefreshing=true;this.textContent='Refreshing...';this.disabled=true;loadParentData().then(()=>{window.K.nav('parentHome');}).catch(()=>window.K.nav('parentHome'));" style="background:transparent;border:1px solid var(--bdr);color:var(--t3);font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:5px 12px;border-radius:5px;cursor:pointer;">↻ Refresh Data</button>
+  </div>
   <!-- Nav tiles -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
     ${navTile({icon:'🥋',label:'View Skills',sub:`${mastered}/${skills.length} mastered · tap to see all`,nav:'parentSkills',accent:'var(--gold)'})}
@@ -151,6 +155,7 @@ export function parentSkills(){
 
   return`
   ${athleteSwitcher(idx,'parentSkills')}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:18px;">Skills</h2><button class="btn" onclick="window.K.refreshParentData()" style="font-size:10px;padding:5px 12px;">⟳ Refresh</button></div>
   <div style="background:linear-gradient(135deg,#1C1C1C,#242424);border-radius:14px;padding:20px 22px;margin-bottom:18px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
       <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:#FAFAF8;">${ath.name} · Skills</div>

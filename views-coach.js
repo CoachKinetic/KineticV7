@@ -181,6 +181,17 @@ export function coachAtt(){
 
 
 export function coachSkills(){
+  const uid=APP.user?.uid;
+  // Require class selection
+  if(!APP.activeSkillClass){
+    const myClasses=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid);
+    if(!myClasses.length)return locked('No classes assigned. Ask your director.');
+    // Auto-select if only one class
+    if(myClasses.length===1){APP.activeSkillClass=myClasses[0].id;APP.selectedClass={...myClasses[0],athleteObjects:APP.allAthletes.filter(a=>(myClasses[0].athletes||[]).includes(a.id))};}
+    else return`<div class="sec-hdr"><h3>Skill Tracker</h3></div>
+    <div class="alert info">Select which class to track skills for.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">${myClasses.map(c=>`<div onclick="window.APP.activeSkillClass='${c.id}';window.APP.selectedClass={...window.APP.allClasses.find(x=>x.id==='${c.id}'),athleteObjects:window.APP.allAthletes.filter(a=>(window.APP.allClasses.find(x=>x.id==='${c.id}')?.athletes||[]).includes(a.id))};window.K.nav('coachSkills')" style="background:var(--panel);border:2px solid var(--bdr);border-radius:12px;padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr)'"><div style="font-size:24px;">🥋</div><div><div style="font-size:14px;font-weight:700;">${c.name}</div><div style="font-size:12px;color:var(--t2);">${c.level} · ${c.day} ${c.time} · ${(c.athletes||[]).length} athletes</div></div></div>`).join('')}</div>`;
+  }
   if(!APP.clockedIn)return locked('Clock in first.');
   const cls=APP.activeSkillClass?APP.allClasses.find(c=>c.id===APP.activeSkillClass):APP.selectedClass;
   if(!cls){const uid=APP.user?.uid;const my=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid);return`<div class="sec-hdr"><h3>Skill Tracker</h3></div><p style="font-size:14px;color:var(--t2);margin-bottom:16px;">Select a class:</p>${my.map(c=>`<div class="class-card" style="margin-bottom:10px;" onclick="window.APP.activeSkillClass='${c.id}';window.K.nav('coachSkills')"><div class="cn">${c.name}</div><div class="ct">${c.day} · ${c.time}</div></div>`).join('')}`;}
@@ -199,33 +210,67 @@ export function coachSkills(){
 }
 
 export function coachNotes(){
-  if(!APP.clockedIn&&!APP.activeSkillClass)return locked('Start a class session first.');
-  const cls=APP.selectedClass||APP.allClasses.find(c=>c.id===APP.activeSkillClass)||{name:'General',id:'gen'};
+  // Determine active class - from session OR fallback to coach's classes
   const uid=APP.user?.uid;
+  const classId=APP.notesClassId||APP.activeSkillClass||null;
+  const cls=classId?APP.allClasses.find(c=>c.id===classId):null;
+
+  // If no class context yet, show class picker
+  if(!cls){
+    const myClasses=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid);
+    if(!myClasses.length)return locked('No classes assigned.');
+    return`<div class="sec-hdr"><h3>Notes</h3></div>
+    <p style="font-size:14px;color:var(--t2);margin-bottom:14px;">Which class are you writing notes for?</p>
+    <div style="display:flex;flex-direction:column;gap:8px;">${myClasses.map(c=>`<div onclick="window.APP.notesClassId='${c.id}';window.APP.activeSkillClass='${c.id}';window.K.nav('coachNotes')" style="background:var(--panel);border:2px solid var(--bdr);border-radius:12px;padding:14px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all 0.15s;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr)'"><div><div style="font-size:14px;font-weight:700;">${c.name}</div><div style="font-size:12px;color:var(--t2);">${c.day} · ${c.time}</div></div><span style="color:var(--gold);">→</span></div>`).join('')}</div>`;
+  }
+
+  // Track the classId in state
+  APP.notesClassId=classId;
+
   const todayStr=new Date().toISOString().split('T')[0];
   const notesDate=APP.notesViewDate||todayStr;
   const isToday=notesDate===todayStr;
 
-  // Load past notes into display
-  const histNote=APP.notesHistory?.[notesDate+'_'+(cls.id||'gen')];
+  // Generate only dates matching this class's day of week
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const targetDay=cls.day?days.indexOf(cls.day):-1;
+  const classDates=[];
+  for(let i=0;classDates.length<8&&i<90;i++){
+    const d=new Date();d.setDate(d.getDate()-i);
+    if(targetDay<0||d.getDay()===targetDay){classDates.push(d.toISOString().split('T')[0]);}
+  }
+
+  const histNote=APP.notesHistory?.[notesDate+'_'+classId];
   const cn=isToday?(APP.classNotes||''):(histNote?.classNotes||'');
   const inn=isToday?(APP.issueNotes||''):(histNote?.issueNotes||'');
 
   return`
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-    <div><h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:18px;">Class Notes</h2><div style="font-size:12px;color:var(--t3);">${cls.name}${!isToday?' · Viewing past':'·  Today'}</div></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:18px;">Class Notes</h2>
+      <div style="font-size:12px;color:var(--t3);margin-top:2px;">${cls.name} · ${cls.day}s<span onclick="window.APP.notesClassId=null;window.APP.notesViewDate=null;window.K.nav('coachNotes')" style="color:var(--gold);cursor:pointer;margin-left:8px;font-size:11px;">change class</span></div>
+    </div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-      <button class="btn" onclick="window.K.loadLastClassNotes()" style="font-size:10px;padding:6px 12px;white-space:nowrap;">See Last Notes ↩</button>
-      <button class="btn" onclick="window.APP.notesViewDate=new Date(new Date('${notesDate}T12:00').getTime()-86400000).toISOString().split('T')[0];window.K.loadNotesHistory(window.APP.notesViewDate,window.APP.activeSkillClass||'gen')">‹</button>
-      <input type="date" class="fi" style="width:auto;font-size:12px;padding:5px 10px;" value="${notesDate}" max="${todayStr}" onchange="window.APP.notesViewDate=this.value;window.K.loadNotesHistory(this.value,window.APP.activeSkillClass||'gen')">
-      <button class="btn ${isToday?'primary':''}" onclick="window.APP.notesViewDate=null;window.K.nav('coachNotes')">Today</button>
+      <button class="btn" onclick="window.K.loadLastClassNotes('${classId}')" style="font-size:10px;padding:6px 12px;white-space:nowrap;">↩ See Last Notes</button>
+      ${!isToday?`<button class="btn primary" onclick="window.APP.notesViewDate=null;window.K.nav('coachNotes')" style="font-size:10px;padding:6px 12px;">Back to Today</button>`:''}
     </div>
   </div>
-  ${!isToday?`<div class="alert info" style="margin-bottom:14px;font-size:12px;">📅 Viewing notes from ${new Date(notesDate+'T12:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}. ${histNote?'':'No notes saved for this date.'}</div>`:''}
-  <div class="fg"><label class="fl">Class Notes</label><textarea class="ft" id="cnTa" style="min-height:130px;" placeholder="What did you work on today? Wins, corrections, focus areas...">${cn}</textarea></div>
-  <div class="fg"><label class="fl">Concerns / Flag for Director</label><textarea class="ft" id="inTa" style="min-height:80px;" placeholder="Anything the director should know about? (injuries, behavior, billing concerns)">${inn}</textarea></div>
-  <button class="btn primary full" style="margin-top:4px;" onclick="window.K.saveNotes()">Save Notes ☁️</button>
-  ${APP.notesSaved&&isToday?`<div style="margin-top:10px;"><div class="alert ok">✓ Notes saved! Your director can see flagged items.</div></div>`:''}`;
+
+  <!-- Class-specific date picker -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;">
+    ${classDates.map((d,i)=>{
+      const label=i===0?'Today':i===1?'Last '+cls.day:new Date(d+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      const isSelected=d===notesDate;
+      return`<button onclick="window.APP.notesViewDate='${d}';window.K.loadNotesHistory('${d}','${classId}')" style="white-space:nowrap;padding:6px 12px;border-radius:20px;border:1.5px solid ${isSelected?'var(--gold)':'var(--bdr)'};background:${isSelected?'rgba(181,153,106,0.12)':'var(--panel)'};font-size:12px;font-weight:${isSelected?700:500};color:${isSelected?'var(--gold)':'var(--t2)'};cursor:pointer;transition:all 0.15s;">${label}</button>`;
+    }).join('')}
+  </div>
+
+  ${!isToday?`<div class="alert info" style="margin-bottom:12px;font-size:12px;">📅 Viewing notes from ${new Date(notesDate+'T12:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}. ${histNote?'':'No notes saved for this date.'}</div>`:''}
+
+  <div class="fg"><label class="fl">Class Notes</label><textarea class="ft" id="cnTa" style="min-height:130px;" placeholder="What did you work on? Wins, corrections, focus areas...">${cn}</textarea></div>
+  <div class="fg"><label class="fl">Concerns / Flag for Director</label><textarea class="ft" id="inTa" style="min-height:80px;" placeholder="Anything the director should know? (injuries, behavior, billing concerns)">${inn}</textarea></div>
+  <button class="btn primary full" onclick="window.APP.notesClassId='${classId}';window.K.saveNotes()">Save Notes ☁️</button>
+  ${APP.notesSaved&&isToday?`<div style="margin-top:10px;"><div class="alert ok">✓ Saved! Director can see flagged items.</div></div>`:''}`;
 }
 
 
