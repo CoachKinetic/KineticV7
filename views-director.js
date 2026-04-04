@@ -45,6 +45,8 @@ export function dirHome(){
     </div>
   </div>
 
+  ${(()=>{const active=(APP.allTimecards||[]).filter(t=>t.status==='active');if(!active.length)return'';return`<div style="background:linear-gradient(135deg,#0A1F0A,#0D2A0D);border:1px solid rgba(94,200,94,0.25);border-radius:12px;padding:14px 20px;margin-bottom:18px;"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"><div style="width:8px;height:8px;border-radius:50%;background:#5EC85E;animation:pulse 2s infinite;flex-shrink:0;"></div><span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(94,200,94,0.7);">On The Clock Now · ${active.length} Coach${active.length>1?'es':''}</span></div><div style="display:flex;gap:10px;flex-wrap:wrap;">${active.map(t=>{const m=t.clockIn?Math.floor((Date.now()-new Date(t.clockIn).getTime())/60000):0;return`<div style="background:rgba(94,200,94,0.08);border:1px solid rgba(94,200,94,0.2);border-radius:8px;padding:8px 14px;display:flex;align-items:center;gap:9px;"><div class="mini-av" style="width:30px;height:30px;font-size:11px;">${ini(t.coachName||'?')}</div><div><div style="font-size:13px;font-weight:700;color:#FAFAF8;">${t.coachName||'Coach'}</div><div style="font-size:11px;color:rgba(94,200,94,0.7);">⏱ ${m>=60?Math.floor(m/60)+'h '+(m%60)+'m':m+'m'} · ${t.className||'General'}</div></div></div>`;}).join('')}</div></div>`;})()}
+
   <div class="g2" style="margin-bottom:18px;">
     <div>
       <div class="sec-hdr"><h3>Today — ${today}</h3><button class="slink" onclick="window.K.nav('dirSched')">Full Schedule →</button></div>
@@ -236,7 +238,14 @@ export function dirSubs(){
     {key:'awaiting_original',label:'Awaiting Original Coach',color:'#60A5FA',bg:'rgba(96,165,250,0.1)',action:()=>''},
     {key:'confirmed',label:'✓ Confirmed',color:'#5EC85E',bg:'rgba(94,200,94,0.1)',action:()=>''},
   ];
+  const pendingMakeups=(APP.makeupRequests||[]).filter(r=>r.status==='pending');
+  const allMakeups=(APP.makeupRequests||[]);
   return `
+  ${pendingMakeups.length>0?`<div style="background:linear-gradient(135deg,rgba(181,153,106,0.08),rgba(181,153,106,0.03));border:1px solid rgba(181,153,106,0.25);border-radius:12px;padding:16px 20px;margin-bottom:18px;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">🎯 Makeup Class Requests — ${pendingMakeups.length} Pending</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">${pendingMakeups.map(r=>{const reqDate=r.requestedDate?new Date(r.requestedDate+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}):r.requestedDate;return`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:10px;padding:13px 16px;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><div><div style="font-size:14px;font-weight:700;">${r.athName||'Athlete'}</div><div style="font-size:12px;color:var(--t2);">${r.originalClassName} → <strong>${r.requestedClassName}</strong> · ${reqDate}</div></div></div><div style="display:flex;gap:6px;margin-top:8px;"><button class="btn primary" style="flex:1;font-size:11px;" onclick="window.K.approveMakeupRequest('${r.id}')">✓ Approve</button><button class="btn danger" style="flex:1;font-size:11px;" onclick="window.K.denyMakeupRequest('${r.id}')">Deny</button></div></div>`;}).join('')}
+    </div>
+  </div>`:''}
   <div class="sec-hdr"><h3>Sub Requests</h3></div>
   ${all.length===0?`<div class="empty-state"><div class="es-icon">🔄</div><h3>No sub requests</h3><p>When coaches need substitutes, requests will appear here.</p></div>`
   :steps.map(step=>{const reqs=all.filter(r=>r.status===step.key);if(!reqs.length)return'';return`<div style="margin-bottom:20px;"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><div style="width:8px;height:8px;border-radius:50%;background:${step.color};"></div><div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${step.color};">${step.label}</div><span style="background:${step.bg};color:${step.color};font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid ${step.color}44;">${reqs.length}</span></div>

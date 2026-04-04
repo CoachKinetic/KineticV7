@@ -2,7 +2,7 @@ import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, toast, sync } fro
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { doc, setDoc, getDoc, collection, addDoc, getDocs, deleteDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, coachDocuments, coachRoutines, library, skillDetail, lessonPlans } from './views-coach.js?v=800';
+import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, coachDocuments, coachRoutines, coachCerts, library, skillDetail, lessonPlans } from './views-coach.js?v=800';
 import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance, dirDocuments, dirRoutines, dirAnalytics } from './views-director.js?v=800';
 import { parentHome, parentSkills, parentTuition, parentMsgs, parentDocuments, parentRoutines } from './views-parent.js?v=800';
 
@@ -59,6 +59,7 @@ function setupRealtimeListeners(){
   _snapUnsubs.push(onSnapshot(query(collection(db,'messages'),where('gymId','==',gid)),snap=>{APP.messages=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));updateBadges();if(['dirMsgs','coachMsgs','parentMsgs'].includes(APP.view))render();}));
   _snapUnsubs.push(onSnapshot(query(collection(db,'timecards'),where('gymId','==',gid)),snap=>{APP.allTimecards=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>new Date(b.clockIn||0)-new Date(a.clockIn||0));if(APP.role==='coach')APP.myTimecards=APP.allTimecards.filter(t=>t.coachId===APP.user?.uid);updateBadges();}));
   _snapUnsubs.push(onSnapshot(query(collection(db,'injuries'),where('gymId','==',gid)),snap=>{APP.allInjuries=snap.docs.map(d=>({id:d.id,...d.data()}));updateBadges();}));
+  _snapUnsubs.push(onSnapshot(query(collection(db,'makeupRequests'),where('gymId','==',gid)),snap=>{APP.makeupRequests=snap.docs.map(d=>({id:d.id,...d.data()}));updateBadges();if(APP.view==='dirSubs'||APP.view==='parentHome')render();}));
 }
 
 async function loadAll(){
@@ -76,9 +77,10 @@ async function loadAll(){
       getDocs(query(collection(db,'notes'),where('gymId','==',gid))),
       getDocs(query(collection(db,'documents'),where('gymId','==',gid))),
       getDocs(query(collection(db,'routines'),where('gymId','==',gid))),
+      getDocs(query(collection(db,'makeupRequests'),where('gymId','==',gid))),
     ]);
     const safe=i=>results[i].status==='fulfilled'?results[i].value:{docs:[]};
-    const[clsS,athS,coaS,tcS,subS,injS,msgS,noteS,docS,routS]=Array.from({length:10},(_,i)=>safe(i));
+    const[clsS,athS,coaS,tcS,subS,injS,msgS,noteS,docS,routS,mkS]=Array.from({length:11},(_,i)=>safe(i));
     APP.allClasses=clsS.docs.map(d=>({id:d.id,...d.data()}));
     const allAth=athS.docs.map(d=>({id:d.id,...d.data()}));
     APP.allAthletes=allAth.filter(a=>!a.archived);APP.archivedAthletes=allAth.filter(a=>a.archived);
@@ -90,6 +92,7 @@ async function loadAll(){
     APP.coachConcerns=noteS.docs.map(d=>({id:d.id,...d.data()})).filter(n=>n.issueNotes&&n.issueNotes.trim()&&!n.dismissed).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
     APP.allDocuments=docS.docs.map(d=>({id:d.id,...d.data()}));
     APP.allRoutines=routS.docs.map(d=>({id:d.id,...d.data()}));
+    APP.makeupRequests=mkS.docs.map(d=>({id:d.id,...d.data()}));
     if(APP.role==='coach')APP.myTimecards=APP.allTimecards.filter(t=>t.coachId===APP.user?.uid);
     if(APP.role==='parent'){const pa=await getDocs(query(collection(db,'athletes'),where('parentEmail','==',APP.user.email)));APP.parentAthletes=pa.docs.map(d=>({id:d.id,...d.data()}));}
     const gs=await getDoc(doc(db,'gyms',gid));if(gs.exists())APP.gymProfile=gs.data();
@@ -130,7 +133,7 @@ const MOB_NAV={
   parent:[{i:'🏠',l:'Home',v:'parentHome'},{i:'🥋',l:'Skills',v:'parentSkills'},{i:'💳',l:'Tuition',v:'parentTuition'},{i:'💬',l:'Messages',v:'parentMsgs'},{i:'⋯',l:'More',v:'more'}],
 };
 const MOB_MORE={
-  coach:[{i:'📝',l:'Notes',v:'coachNotes'},{i:'📋',l:'Lessons',v:'lessons'},{i:'📚',l:'Skill Library',v:'library'},{i:'📄',l:'Documents',v:'coachDocuments'},{i:'🎥',l:'Routines',v:'coachRoutines'},{i:'💬',l:'Messages',v:'coachMsgs'},{i:'👤',l:'Profile',v:'coachProfile'}],
+  coach:[{i:'📝',l:'Notes',v:'coachNotes'},{i:'📋',l:'Lessons',v:'lessons'},{i:'📚',l:'Skill Library',v:'library'},{i:'📄',l:'Documents',v:'coachDocuments'},{i:'🎥',l:'Routines',v:'coachRoutines'},{i:'💬',l:'Messages',v:'coachMsgs'},{i:'🏅',l:'Certs',v:'coachCerts'},{i:'👤',l:'Profile',v:'coachProfile'}],
   director:[{i:'🧑‍🏫',l:'Coaches',v:'dirCoaches'},{i:'🔄',l:'Sub Requests',v:'dirSubs'},{i:'💰',l:'Tuition',v:'dirBilling'},{i:'⏱️',l:'Timecards',v:'dirTimecards'},{i:'📊',l:'Analytics',v:'dirAnalytics'},{i:'📄',l:'Documents',v:'dirDocuments'},{i:'🎥',l:'Routines',v:'dirRoutines'},{i:'🚑',l:'Injury Log',v:'dirInjuries'}],
   parent:[{i:'📄',l:'Documents',v:'parentDocuments'},{i:'🎥',l:'Routines',v:'parentRoutines'}],
 };
@@ -155,7 +158,7 @@ window._moreOpen=false;
 
 function updateBadges(){
   renderMobileNav();
-  const pending=(APP.subRequests||[]).filter(r=>r.status==='pending'||r.status==='claimed').length;
+  const pending=(APP.subRequests||[]).filter(r=>r.status==='pending'||r.status==='claimed').length+(APP.makeupRequests||[]).filter(r=>r.status==='pending').length;
   const unread=(APP.messages||[]).filter(m=>!m.read&&m.fromId!==APP.user?.uid&&m.fromId!=='system').length;
   const tc=(APP.allTimecards||[]).filter(t=>t.status==='pending').length;
   const badge=$('tbBadge');
@@ -215,7 +218,7 @@ function initApp(){
 }
 
 const NAV={
-  coach:[{s:'Class Tools'},{i:'🏠',l:'Dashboard',v:'coachDash'},{i:'✅',l:'Attendance',v:'coachAtt'},{i:'🥋',l:'Skill Tracker',v:'coachSkills'},{i:'📝',l:'Notes',v:'coachNotes'},{i:'📋',l:'Lesson Plans',v:'lessons'},{s:'My KINETIC'},{i:'📚',l:'Skill Library',v:'library'},{i:'📅',l:'My Schedule',v:'coachSched'},{i:'💬',l:'Messages',v:'coachMsgs'},{i:'📄',l:'Documents',v:'coachDocuments'},{i:'🎥',l:'Routines',v:'coachRoutines'},{i:'👤',l:'My Profile',v:'coachProfile'}],
+  coach:[{s:'Class Tools'},{i:'🏠',l:'Dashboard',v:'coachDash'},{i:'✅',l:'Attendance',v:'coachAtt'},{i:'🥋',l:'Skill Tracker',v:'coachSkills'},{i:'📝',l:'Notes',v:'coachNotes'},{i:'📋',l:'Lesson Plans',v:'lessons'},{s:'My KINETIC'},{i:'📚',l:'Skill Library',v:'library'},{i:'📅',l:'My Schedule',v:'coachSched'},{i:'💬',l:'Messages',v:'coachMsgs'},{i:'📄',l:'Documents',v:'coachDocuments'},{i:'🎥',l:'Routines',v:'coachRoutines'},{i:'🏅',l:'My Certifications',v:'coachCerts'},{i:'👤',l:'My Profile',v:'coachProfile'}],
   director:[{s:'Today'},{i:'🏠',l:'Overview',v:'dirHome'},{i:'📋',l:'Attendance',v:'dirAttendance'},{i:'💬',l:'Messages',v:'dirMsgs'},{s:'Team'},{i:'👧',l:'Athletes',v:'dirAthletes'},{i:'🧑‍🏫',l:'Coaches',v:'dirCoaches'},{i:'📅',l:'Schedule',v:'dirSched'},{i:'🔄',l:'Sub Requests',v:'dirSubs'},{s:'Admin'},{i:'💰',l:'Tuition',v:'dirBilling'},{i:'⏱️',l:'Timecards',v:'dirTimecards'},{i:'🚑',l:'Injury Log',v:'dirInjuries'},{i:'📊',l:'Analytics',v:'dirAnalytics'},{s:'Content'},{i:'📄',l:'Documents',v:'dirDocuments'},{i:'🎥',l:'Routines',v:'dirRoutines'},{i:'📚',l:'Skill Library',v:'library'}],
   parent:[{s:'My Athletes'},{i:'🏠',l:'Dashboard',v:'parentHome'},{i:'📈',l:'Skills',v:'parentSkills'},{i:'💳',l:'Tuition',v:'parentTuition'},{i:'💬',l:'Messages',v:'parentMsgs'},{i:'📄',l:'Documents',v:'parentDocuments'},{i:'🎥',l:'Routines',v:'parentRoutines'}],
 };
@@ -250,7 +253,7 @@ async function loadAI(){
 function render(){
   const c=$('mc');if(!c)return;
   const v=APP.view||'coachDash';
-  const views={coachDash,coachAtt,coachSkills,coachNotes,coachSched,coachMsgs,coachProfile,coachDocuments,coachRoutines,lessons:lessonPlans,library:()=>library(APP.libLevel||'all',APP.libEvent||'all'),dirHome,dirSched,dirAttendance,dirAthletes:()=>dirAthletes('active'),dirAthletes_arch:()=>dirAthletes('archived'),dirCoaches,dirTimecards,dirMsgs,dirBilling,dirSubs,dirInjuries,dirDocuments,dirRoutines,dirAnalytics,parentHome,parentSkills,parentTuition,parentMsgs,parentDocuments,parentRoutines};
+  const views={coachDash,coachAtt,coachSkills,coachNotes,coachSched,coachMsgs,coachProfile,coachDocuments,coachRoutines,coachCerts,lessons:lessonPlans,library:()=>library(APP.libLevel||'all',APP.libEvent||'all'),dirHome,dirSched,dirAttendance,dirAthletes:()=>dirAthletes('active'),dirAthletes_arch:()=>dirAthletes('archived'),dirCoaches,dirTimecards,dirMsgs,dirBilling,dirSubs,dirInjuries,dirDocuments,dirRoutines,dirAnalytics,parentHome,parentSkills,parentTuition,parentMsgs,parentDocuments,parentRoutines};
   if(v.startsWith('skill_')){c.innerHTML=skillDetail(v.replace('skill_',''));return;}
   try{c.innerHTML=(views[v]?views[v]():`<div class="empty-state"><div class="es-icon">🔒</div><h3>Coming Soon</h3><p>This feature is on the roadmap for KINETIC 2.0.</p></div>`);}
   catch(err){console.error('render:',v,err);c.innerHTML=`<div class="empty-state"><div class="es-icon">⚠️</div><h3>Something went wrong</h3><p style="font-size:12px;">${err.message}</p><button class="btn primary" style="margin-top:16px;" onclick="K.nav('${APP.role==='director'?'dirHome':APP.role==='coach'?'coachDash':'parentHome'}')">← Go Home</button></div>`;}
@@ -308,6 +311,7 @@ openModal(id,data={}){
   if(id==='rosterModal'){const c=APP.allClasses.find(x=>x.id===data.classId);if(!c)return;const aths=APP.allAthletes.filter(a=>(c.athletes||[]).includes(a.id));$('rosterContent').innerHTML=`<div style="display:flex;justify-content:space-between;margin-bottom:16px;"><h3 style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;">${c.name}</h3><button class="btn" onclick="K.closeModal('rosterModal')">✕</button></div>${aths.map(a=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bdr2);"><div class="mini-av">${ini(a.name)}</div><div style="flex:1;font-size:13px;font-weight:600;">${a.name}</div></div>`).join('')}`;}
   if(id==='uploadDocModal'){$('uploadDocContent').innerHTML=buildUploadDocForm();}
   if(id==='uploadRoutineModal'){$('uploadRoutineContent').innerHTML=buildUploadRoutineForm();}
+  if(id==='makeupReqModal'){$('makeupReqContent').innerHTML=buildMakeupReqForm(data);}
   $(id).classList.add('open');
 },
 closeModal(id){$(id).classList.remove('open');},
@@ -320,14 +324,25 @@ async saveNotes(){const cn=$('cnTa'),inn=$('inTa');if(cn)APP.classNotes=cn.value
 startSession(classId){const cls=APP.allClasses.find(c=>c.id===classId);if(!cls)return;if(!APP.clockedIn){toast('Clock in first','warn');return;}APP.activeSkillClass=classId;APP.selectedClass={...cls,athleteObjects:APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id))};if(!APP.attState[classId]){APP.attState[classId]={};APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).forEach((_,i)=>{APP.attState[classId][i]='present';});}const st=APP.sessionState?.[classId]||{};APP.view=st.skillsDone?'coachNotes':st.attDone?'coachSkills':'coachAtt';if(APP.view==='coachAtt')APP.attDay=cls.day;renderNav();render();},
 startSkills(classId){APP.activeSkillClass=classId;const cls=APP.allClasses.find(c=>c.id===classId);if(cls)APP.selectedClass={...cls,athleteObjects:APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id))};APP.view='coachSkills';renderNav();render();},
 async loadNotesHistory(date,classId){try{const s=await getDoc(doc(db,'notes/'+APP.user.uid+'_'+date+'_'+classId));if(s.exists()){const d=s.data();APP.classNotes=d.classNotes||'';APP.issueNotes=d.issueNotes||'';APP.privateNotes=d.privateNotes||{};}else{APP.classNotes='No notes for this date.';APP.issueNotes='';APP.privateNotes={};}render();}catch(e){render();}},
-clockIn(){const my=APP.allClasses.filter(c=>(c.coaches||[]).includes(APP.user?.uid)||c.coachId===APP.user?.uid);if(my.length===0){K.doClockIn(null);return;}if(my.length===1){K.doClockIn(my[0]);return;}$('mc').innerHTML=`<h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:22px;margin-bottom:8px;">Which class are you teaching?</h2><p style="font-size:14px;color:var(--t2);margin-bottom:20px;">You can switch classes after clocking in.</p>${my.map(c=>`<div onclick="K.clockInClass('${c.id}')" style="background:var(--panel);border:2px solid var(--bdr);border-radius:12px;padding:18px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr)'"><div style="font-size:28px;">🥋</div><div style="flex:1;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;">${c.name}</div><div style="font-size:12px;color:var(--t2);margin-top:3px;">${c.day} · ${c.time} · ${c.level}</div></div><span style="color:var(--gold);font-size:20px;">→</span></div>`).join('')}`;},
-clockInClass(id){K.doClockIn(APP.allClasses.find(c=>c.id===id)||null);},
-async doClockIn(cls){
-  // Block double clock-in — one session per user
+clockIn(){K.doClockIn();},
+async doClockIn(){
+  // Block double clock-in
   const existing=(APP.myTimecards||[]).find(t=>t.status==='active'&&t.coachId===APP.user?.uid);
   if(existing){toast('You are already clocked in. Clock out first.','warn');APP.view='coachDash';render();return;}
-  APP.clockedIn=true;APP.clockInTime=new Date();APP.clockSessionId='tc_'+APP.user.uid+'_'+Date.now();APP.selectedClass=cls?{...cls,athleteObjects:APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id))}:{name:'General',athleteObjects:[]};APP.attState={};APP.attSavedClasses={};APP.skillState={};APP.attSaved=false;APP.notesSaved=false;APP.classNotes='';APP.issueNotes='';APP.sessionState={};if(cls){APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).forEach((_,i)=>{if(!APP.attState[cls.id])APP.attState[cls.id]={};APP.attState[cls.id][i]='present';});}try{await setDoc(doc(db,'timecards',APP.clockSessionId),{coachId:APP.user.uid,coachName:APP.profile?.name||'Coach',gymId:APP.gymId||null,classId:cls?.id||null,className:cls?.name||'General',date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),clockIn:APP.clockInTime.toISOString(),status:'active'});}catch(e){}APP.activeSkillClass=cls?.id||null;APP.view='coachDash';renderNav();render();toast(`✓ Clocked In${cls?` — ${cls.name}`:''}`);},
-clockOut(){if(!APP.attSaved){toast('Save attendance first','warn');return;}K.openModal('coModal');['coS1','coS2','coS3','coS4'].forEach((id,i)=>{const e=$(id);if(e)e.style.display=i===0?'block':'none';});},
+  APP.clockedIn=true;APP.clockInTime=new Date();
+  APP.clockSessionId='tc_'+APP.user.uid+'_'+Date.now();
+  APP.attState={};APP.attSavedClasses={};APP.skillState={};APP.attSaved=false;APP.notesSaved=false;APP.classNotes='';APP.issueNotes='';APP.sessionState={};
+  try{await setDoc(doc(db,'timecards',APP.clockSessionId),{coachId:APP.user.uid,coachName:APP.profile?.name||'Coach',gymId:APP.gymId||null,classId:null,className:'General',date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),clockIn:APP.clockInTime.toISOString(),status:'active'});}catch(e){}
+  // Warn if they have classes today
+  const today=new Date().toLocaleDateString('en-US',{weekday:'long'});
+  const myTodayClasses=APP.allClasses.filter(c=>((c.coaches||[]).includes(APP.user?.uid)||c.coachId===APP.user?.uid)&&c.day===today);
+  if(myTodayClasses.length>0){
+    setTimeout(()=>toast(`⚠️ You have ${myTodayClasses.length} class${myTodayClasses.length>1?'es':''} today — remember to take attendance!`,'warn'),400);
+  }
+  APP.view='coachDash';renderNav();render();toast(`✓ Clocked In`);
+},
+clockOut(){K.openModal('coModal');['coS1','coS2','coS3','coS4'].forEach((id,i)=>{const e=$(id);if(e)e.style.display=i===0?'block':'none';});},
+,
 coTime(yes){$('coS1').style.display='none';$(yes?'coS3':'coS2').style.display='block';},
 async coNote(){const n=val('coNote');if(n&&APP.clockSessionId)try{await setDoc(doc(db,'timecards',APP.clockSessionId),{directorNote:n},{merge:true});}catch(e){}$('coS2').style.display='none';$('coS3').style.display='block';},
 coInjury(injured){if(injured){$('coS3').style.display='none';$('coS4').style.display='block';try{addDoc(collection(db,'injuries'),{coachId:APP.user.uid,coachName:APP.profile?.name,gymId:APP.gymId||null,classId:APP.selectedClass?.id,className:APP.selectedClass?.name||'',date:new Date().toISOString(),status:'pending',details:'Auto-logged at clock-out',autoLogged:true});}catch(e){}}else K.coFinish();},
@@ -366,6 +381,67 @@ async loadAttendanceRecords(){const viewDate=APP.attViewDate||new Date().toISOSt
 async editAttRecord(date,clsId,athId,status){const key=date+'_'+clsId;const rec=APP.attRecords?.[key]||{presentIds:[],absentIds:[],classId:clsId,date,gymId:APP.gymId||null};let{presentIds=[],absentIds=[]}=rec;if(status==='present'){presentIds=[...new Set([...presentIds,athId])];absentIds=absentIds.filter(id=>id!==athId);}else{absentIds=[...new Set([...absentIds,athId])];presentIds=presentIds.filter(id=>id!==athId);}try{await setDoc(doc(db,'attendance/'+key),{...rec,presentIds,absentIds,updatedAt:new Date().toISOString()},{merge:true});APP.attRecords[key]={...rec,presentIds,absentIds};toast('✓ Updated');render();}catch(e){toast('⚠️ '+e.message,'warn');}},
 async changePassword(){const np=val('cpNew'),cf=val('cpConf'),err=$('cpErr');err.style.display='none';if(np.length<6){err.textContent='At least 6 characters.';err.style.display='block';return;}if(np!==cf){err.textContent='Passwords do not match.';err.style.display='block';return;}try{await updatePassword(auth.currentUser,np);await setDoc(doc(db,'users',APP.user.uid),{firstLogin:false},{merge:true});APP.profile.firstLogin=false;K.closeModal('changePwModal');toast('✓ Password updated!');}catch(e){const err2=$('cpErr');err2.textContent=e.code==='auth/requires-recent-login'?'Sign out and back in first.':e.message;err2.style.display='block';}},
 nav_attDay(day){APP.attDay=day;render();},
+async submitMakeupRequest(data){
+  try{
+    const ref=await addDoc(collection(db,'makeupRequests'),{...data,gymId:APP.gymId||null,parentId:APP.user?.uid,parentEmail:APP.user?.email,status:'pending',createdAt:new Date().toISOString()});
+    APP.makeupRequests=[{id:ref.id,...data,gymId:APP.gymId,parentId:APP.user?.uid,status:'pending',createdAt:new Date().toISOString()},...(APP.makeupRequests||[])];
+    K.closeModal('makeupReqModal');toast('✓ Makeup request sent to director!');render();
+  }catch(e){toast('⚠️ '+e.message,'warn');}
+},
+async approveMakeupRequest(id){
+  try{
+    const r=(APP.makeupRequests||[]).find(x=>x.id===id);if(!r)return;
+    await setDoc(doc(db,'makeupRequests',id),{status:'approved',approvedAt:new Date().toISOString()},{merge:true});
+    // Write makeup into attendance record for that date/class
+    const attKey=r.requestedDate+'_'+r.requestedClassId;
+    const attSnap=await getDoc(doc(db,'attendance/'+attKey));
+    const existing=attSnap.exists()?attSnap.data():{presentIds:[],absentIds:[],makeupIds:[],makeupDetails:{},classId:r.requestedClassId,date:r.requestedDate,gymId:APP.gymId||null};
+    const mkIds=[...new Set([...(existing.makeupIds||[]),r.athId])];
+    const mkDetails={...(existing.makeupDetails||{}),[r.athId]:{name:r.athName,level:r.athLevel||''}};
+    await setDoc(doc(db,'attendance/'+attKey),{...existing,makeupIds:mkIds,makeupDetails:mkDetails,updatedAt:new Date().toISOString()},{merge:true});
+    // Send confirmation message to parent
+    await addDoc(collection(db,'messages'),{from:'Director',fromId:APP.user?.uid,fromRole:'director',toId:r.parentId,toRole:null,subject:`✓ Makeup Approved — ${r.athName}`,body:`Great news! ${r.athName}'s makeup class has been approved.
+
+Class: ${r.requestedClassName}
+Date: ${new Date(r.requestedDate+'T12:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
+
+${r.athName} will appear on the coach's roster as a MAKEUP student. See you there!`,preview:`Makeup approved for ${r.requestedClassName} on ${r.requestedDate}`,threadId:'makeup_'+id,time:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),read:false,gymId:APP.gymId||null,createdAt:new Date().toISOString()});
+    APP.makeupRequests=(APP.makeupRequests||[]).map(x=>x.id===id?{...x,status:'approved'}:x);
+    toast('✓ Makeup approved & parent notified!');render();
+  }catch(e){toast('⚠️ '+e.message,'warn');}
+},
+async denyMakeupRequest(id){
+  try{
+    const r=(APP.makeupRequests||[]).find(x=>x.id===id);if(!r)return;
+    await setDoc(doc(db,'makeupRequests',id),{status:'denied',deniedAt:new Date().toISOString()},{merge:true});
+    await addDoc(collection(db,'messages'),{from:'Director',fromId:APP.user?.uid,fromRole:'director',toId:r.parentId,toRole:null,subject:`Makeup Request — ${r.athName}`,body:`Unfortunately, the makeup request for ${r.athName} on ${r.requestedDate} in ${r.requestedClassName} could not be approved. Please contact us if you'd like to arrange an alternative.`,preview:`Makeup request could not be approved`,threadId:'makeup_denied_'+id,time:new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),read:false,gymId:APP.gymId||null,createdAt:new Date().toISOString()});
+    APP.makeupRequests=(APP.makeupRequests||[]).map(x=>x.id===id?{...x,status:'denied'}:x);
+    toast('Denied — parent notified');render();
+  }catch(e){toast('⚠️ '+e.message,'warn');}
+},
+async loadCoachAttHistory(){
+  const uid=APP.user?.uid;
+  const viewDate=APP.coachAttDate||new Date().toISOString().split('T')[0];
+  const dayName=new Date(viewDate+'T12:00').toLocaleDateString('en-US',{weekday:'long'});
+  const my=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid).filter(c=>c.day===dayName);
+  APP.coachAttHistory=APP.coachAttHistory||{};
+  try{await Promise.all(my.map(async cls=>{const key=viewDate+'_'+cls.id;try{const snap=await getDoc(doc(db,'attendance/'+key));APP.coachAttHistory[key]=snap.exists()?{id:snap.id,...snap.data()}:null;}catch(e){APP.coachAttHistory[key]=null;}}));}catch(e){}
+  render();
+},
+async saveAttHistory(date,clsId){
+  sync(true);
+  const cls=APP.allClasses.find(c=>c.id===clsId);
+  const aths=APP.allAthletes.filter(a=>(cls?.athletes||[]).includes(a.id));
+  const state=APP.attState[clsId]||{};
+  const presentIds=aths.filter((_,i)=>state[i]!=='absent').map(a=>a.id);
+  const absentIds=aths.filter((_,i)=>state[i]==='absent').map(a=>a.id);
+  try{
+    await setDoc(doc(db,'attendance/'+date+'_'+clsId),{date,attendance:state,presentIds,absentIds,coachId:APP.user.uid,classId:clsId,className:cls?.name||'',gymId:APP.gymId||null,updatedAt:new Date().toISOString(),editedAt:new Date().toISOString()},{merge:true});
+    if(!APP.coachAttHistory)APP.coachAttHistory={};
+    APP.coachAttHistory[date+'_'+clsId]={presentIds,absentIds,attendance:state};
+    sync(false);toast('✓ Attendance updated!');render();
+  }catch(e){sync(false);toast('⚠️ '+e.message,'warn');}
+},
 async saveDocument(){const name=val('doc_name').trim(),fileUrl=val('doc_url').trim(),fileType=val('doc_type')||'other',description=val('doc_desc').trim(),sharedWith=val('doc_share');if(!name){toast('Document name required','warn');return;}let sharedWithIds=[];if(sharedWith==='class'){sharedWithIds=[...document.querySelectorAll('input[name="doc_share_ids"]:checked')].map(c=>c.value);}else if(sharedWith==='athlete'){sharedWithIds=[...document.querySelectorAll('input[name="doc_share_ids"]:checked')].map(c=>c.value);}try{const data={name,fileUrl,fileType,description,sharedWith,sharedWithIds,uploadedBy:APP.user?.uid,uploadedByName:APP.profile?.name||'Director',gymId:APP.gymId||null,createdAt:new Date().toISOString()};const ref=await addDoc(collection(db,'documents'),data);APP.allDocuments=[{id:ref.id,...data},...APP.allDocuments];K.closeModal('uploadDocModal');toast('✓ Document saved!');render();}catch(e){toast('⚠️ '+e.message,'warn');}},
 async deleteDocument(id){if(!confirm('Delete this document?'))return;try{await deleteDoc(doc(db,'documents',id));APP.allDocuments=(APP.allDocuments||[]).filter(d=>d.id!==id);toast('✓ Deleted');render();}catch(e){toast('⚠️ '+e.message,'warn');}},
 async saveRoutine(){const name=val('rout_name').trim(),videoUrl=val('rout_video').trim(),audioUrl=val('rout_audio').trim(),notes=val('rout_notes').trim(),clsId=val('rout_class');if(!name){toast('Routine name required','warn');return;}const cls=APP.allClasses.find(c=>c.id===clsId);try{const data={name,videoUrl,audioUrl,notes,classId:clsId||null,className:cls?.name||'All Classes',level:cls?.level||'',createdBy:APP.user?.uid,gymId:APP.gymId||null,createdAt:new Date().toISOString()};const ref=await addDoc(collection(db,'routines'),data);APP.allRoutines=[{id:ref.id,...data},...APP.allRoutines];K.closeModal('uploadRoutineModal');toast('✓ Routine saved!');render();}catch(e){toast('⚠️ '+e.message,'warn');}},
@@ -458,3 +534,48 @@ function buildEditCoachForm(c){
 window._SKILLS=SKILLS;
 window.toast=toast;
 window.render=render;
+
+function buildMakeupReqForm(data){
+  const {athId,athName,athLevel,originalClassId,originalClassName}=data||{};
+  if(!athId)return`<div class="mo-title">Request Makeup Class</div><p style="color:var(--t2);">Error loading form.</p>`;
+
+  // Available classes: same level, not full, athlete not already enrolled
+  const available=(APP.allClasses||[]).filter(c=>
+    c.level===athLevel &&
+    c.id!==originalClassId &&
+    !(c.athletes||[]).includes(athId) &&
+    (c.athletes||[]).length<(c.cap||8)
+  );
+
+  // Generate next 6 upcoming dates for a given day-of-week
+  const getUpcomingDates=(dayName,count=6)=>{
+    const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const target=days.indexOf(dayName);if(target<0)return[];
+    const dates=[];const d=new Date();d.setDate(d.getDate()+1);
+    while(dates.length<count){if(d.getDay()===target)dates.push(new Date(d).toISOString().split('T')[0]);d.setDate(d.getDate()+1);}
+    return dates;
+  };
+
+  return`<div class="mo-title">Request Makeup Class</div>
+  <p style="font-size:13px;color:var(--t2);margin-bottom:18px;">Choose a class and date for <strong>${athName}</strong>. Director approval required.</p>
+  <div style="background:var(--p2);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;"><span style="color:var(--t3);">Missed class: </span><strong>${originalClassName}</strong></div>
+  ${available.length===0?`<div class="alert warn">No available makeup classes found at ${athLevel}. All classes at this level are full or this athlete is already enrolled.</div>`
+  :`<div class="fg"><label class="fl">Select a Class & Date</label>
+    <div id="mkClassList" style="display:flex;flex-direction:column;gap:8px;">
+      ${available.map(c=>{const dates=getUpcomingDates(c.day);return`<div style="background:var(--panel);border:2px solid var(--bdr);border-radius:10px;overflow:hidden;transition:border-color 0.15s;" id="mkc_${c.id}">
+        <div style="padding:12px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;" onclick="document.querySelectorAll('[id^=mkc_]').forEach(x=>x.style.borderColor='var(--bdr)');document.getElementById('mkc_${c.id}').style.borderColor='var(--gold)';document.querySelectorAll('.mk-dates').forEach(x=>x.style.display='none');document.getElementById('mkd_${c.id}').style.display='block';">
+          <div><div style="font-weight:700;font-size:14px;">${c.name}</div><div style="font-size:12px;color:var(--t2);">${c.day}s · ${c.time} · ${(c.athletes||[]).length}/${c.cap||8} enrolled</div></div>
+          <span style="color:var(--gold);font-size:18px;">▼</span>
+        </div>
+        <div id="mkd_${c.id}" class="mk-dates" style="display:none;border-top:1px solid var(--bdr);padding:10px 14px;background:var(--p2);">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);margin-bottom:8px;">Pick a date</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">${dates.map(d=>`<button onclick="window._mkSel={classId:'${c.id}',className:'${c.name}',date:'${d}'};document.querySelectorAll('.mk-date-btn').forEach(x=>x.style.background='var(--panel)');this.style.background='var(--gold)';this.style.color='var(--sb)';document.getElementById('mkSubmit').disabled=false;" class="mk-date-btn" style="padding:7px 12px;border:1px solid var(--bdr);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;background:var(--panel);transition:all 0.15s;">${new Date(d+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</button>`).join('')}</div>
+        </div>
+      </div>`;}).join('')}
+    </div>
+  </div>`}
+  <div style="display:flex;gap:8px;margin-top:16px;">
+    <button class="btn" style="flex:1;" onclick="window.K.closeModal('makeupReqModal')">Cancel</button>
+    <button class="btn primary" style="flex:1;" id="mkSubmit" disabled onclick="if(window._mkSel)window.K.submitMakeupRequest({athId:'${athId}',athName:'${athName}',athLevel:'${athLevel||''}',originalClassId:'${originalClassId}',originalClassName:'${originalClassName}',requestedClassId:window._mkSel.classId,requestedClassName:window._mkSel.className,requestedDate:window._mkSel.date})">Send Request →</button>
+  </div>`;
+}

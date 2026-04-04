@@ -24,7 +24,7 @@ export const APP = {
   lessonLevel:'Level 1',
   allClasses:[], allAthletes:[], archivedAthletes:[], allCoaches:[],
   allTimecards:[], myTimecards:[], subRequests:[], allInjuries:[], messages:[],
-  allDocuments:[], allRoutines:[],
+  allDocuments:[], allRoutines:[], makeupRequests:[], parentAttendance:{},
   coachConcerns:[],
   parentAthletes:[], parentAthIdx:0, parentSkillData:{}, parentSkillUpdated:{},
   libLevel:'all', libEvent:'all',

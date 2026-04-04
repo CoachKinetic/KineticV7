@@ -71,54 +71,110 @@ export function simpleHome(){
 export function coachAtt(){
   if(!APP.clockedIn)return locked('Clock in first to take attendance.');
   const uid=APP.user?.uid;
-  const today=new Date().toLocaleDateString('en-US',{weekday:'long'});
   const todayStr=new Date().toISOString().split('T')[0];
+  const viewDate=APP.coachAttDate||todayStr;
+  const isToday=viewDate===todayStr;
+  const viewDateObj=new Date(viewDate+'T12:00');
+  const dayName=viewDateObj.toLocaleDateString('en-US',{weekday:'long'});
   const my=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid);
-  const todayClasses=my.filter(c=>c.day===today).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
+  const dayClasses=my.filter(c=>c.day===dayName).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
 
-  if(todayClasses.length===0)return`<div class="empty-state"><div class="es-icon">📅</div><h3>No classes today</h3><p>You have no classes scheduled for ${today}.</p><button class="btn primary" onclick="window.K.nav('coachSched')" style="margin-top:16px;">View Schedule →</button></div>`;
+  // Load historical records for past dates
+  const histRecords=APP.coachAttHistory||{};
 
-  // Init att state for all today's classes
-  todayClasses.forEach(cls=>{
-    if(!APP.attState[cls.id]){APP.attState[cls.id]={};APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).forEach((_,i)=>{APP.attState[cls.id][i]='present';});}
-  });
+  // Init att state for today's classes only
+  if(isToday){
+    dayClasses.forEach(cls=>{
+      if(!APP.attState[cls.id]){APP.attState[cls.id]={};APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).forEach((_,i)=>{APP.attState[cls.id][i]='present';});}
+    });
+  }
 
-  return`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-    <h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:20px;">Today's Attendance</h2>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);">${today}</div>
+  return`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:20px;">Attendance</h2>
+      <div style="font-size:12px;color:var(--t3);margin-top:2px;">${isToday?'Today':'Editing past record'} · ${dayName}</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button class="btn" onclick="window.APP.coachAttDate=new Date(new Date('${viewDate}T12:00').getTime()-86400000).toISOString().split('T')[0];window.APP.coachAttHistory={};window.K.loadCoachAttHistory();window.K.nav('coachAtt')">‹</button>
+      <input type="date" class="fi" style="width:auto;font-size:12px;padding:5px 10px;" value="${viewDate}" max="${todayStr}" onchange="window.APP.coachAttDate=this.value;window.APP.coachAttHistory={};window.K.loadCoachAttHistory();window.K.nav('coachAtt')">
+      <button class="btn ${isToday?'primary':''}" onclick="window.APP.coachAttDate=null;window.APP.coachAttHistory={};window.K.nav('coachAtt')">Today</button>
+      ${!isToday?`<button class="btn" onclick="const nd=new Date(new Date('${viewDate}T12:00').getTime()+86400000).toISOString().split('T')[0];if(nd<='${todayStr}'){window.APP.coachAttDate=nd;window.APP.coachAttHistory={};window.K.loadCoachAttHistory();window.K.nav('coachAtt');}">›</button>`:''}
+    </div>
   </div>
-  ${todayClasses.map(cls=>{
+
+  ${!isToday?`<div class="alert warn" style="margin-bottom:14px;font-size:13px;">📅 Editing past attendance for ${viewDateObj.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}. Changes save immediately.</div>`:''}
+
+  ${dayClasses.length===0?`<div class="empty-state"><div class="es-icon">📅</div><h3>No classes on ${dayName}s</h3><p>You have no classes scheduled for this day.</p></div>`
+  :dayClasses.map(cls=>{
     const aths=APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id));
     const makeups=(APP.makeupAthletes?.[cls.id]||[]).map(m=>APP.allAthletes.find(a=>a.id===m.athId)).filter(Boolean);
-    const allAths=[...aths,...makeups];
-    const clsState=APP.attState[cls.id]||{};
+    // Also include director-approved makeups from attendance records
+    let histMakeupAths=[];
+    if(!isToday){
+      const rec=histRecords[viewDate+'_'+cls.id];
+      if(rec?.makeupDetails){
+        Object.entries(rec.makeupDetails).forEach(([athId,det])=>{
+          if(!aths.find(a=>a.id===athId))histMakeupAths.push({id:athId,name:det.name||'Makeup Athlete',level:det.level||cls.level||'Level 1',_isMakeup:true});
+        });
+      }
+    } else {
+      // For today, check approved makeups in APP.makeupRequests
+      const todayApproved=(APP.makeupRequests||[]).filter(r=>r.requestedClassId===cls.id&&r.requestedDate===viewDate&&r.status==='approved');
+      todayApproved.forEach(r=>{if(!aths.find(a=>a.id===r.athId))histMakeupAths.push({id:r.athId,name:r.athName||'Makeup',level:r.athLevel||cls.level||'Level 1',_isMakeup:true});});
+    }
+    const allAths=[...aths,...makeups,...histMakeupAths];
+
+    // For past dates use loaded history, for today use live state
+    let clsState={};
+    let saved=false;
+    if(isToday){
+      clsState=APP.attState[cls.id]||{};
+      saved=(APP.attSavedClasses||{})[cls.id];
+    } else {
+      const rec=histRecords[viewDate+'_'+cls.id];
+      if(rec){
+        saved=true;
+        allAths.forEach((a,i)=>{clsState[i]=rec.absentIds?.includes(a.id)?'absent':'present';});
+      } else {
+        allAths.forEach((_,i)=>{clsState[i]='present';});
+      }
+    }
+
     const p=Object.values(clsState).filter(v=>v==='present').length;
-    const saved=(APP.attSavedClasses||{})[cls.id];
-    const now=new Date();const nowMin=now.getHours()*60+now.getMinutes();const minsUntil=timeToMin(cls.time)-nowMin;
-    const isNow=minsUntil<=0&&minsUntil>-90;const isSoon=minsUntil>0&&minsUntil<=20;
+    const now=new Date();const nowMin=now.getHours()*60+now.getMinutes();
+    const minsUntil=isToday?timeToMin(cls.time)-nowMin:null;
+    const isNow=minsUntil!==null&&minsUntil<=0&&minsUntil>-90;
+    const isSoon=minsUntil!==null&&minsUntil>0&&minsUntil<=20;
+
     return`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
       <div style="background:#1C1C1C;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;">
-        <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:#FAFAF8;">${cls.name}</div>${isNow?`<span style="background:var(--gold);color:var(--sb);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:2px 8px;border-radius:10px;">NOW</span>`:isSoon?`<span style="background:rgba(181,153,106,0.2);color:var(--gold);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid rgba(181,153,106,0.3);">In ${minsUntil}m</span>`:''}</div>
+        <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+          <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:#FAFAF8;">${cls.name}</div>
+          ${isNow?`<span style="background:var(--gold);color:var(--sb);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:2px 8px;border-radius:10px;">NOW</span>`:isSoon?`<span style="background:rgba(181,153,106,0.2);color:var(--gold);font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;font-family:'Barlow Condensed',sans-serif;">In ${minsUntil}m</span>`:''}
+        </div>
         <div style="font-size:12px;color:rgba(250,250,248,0.4);">${cls.time} · ${cls.level} · ${allAths.length} athletes</div></div>
-        <div style="display:flex;align-items:center;gap:8px;">${saved?`<span style="background:rgba(42,107,42,0.2);color:#5EC85E;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;border:1px solid rgba(42,107,42,0.3);">✓ Saved</span>`:''}
-        <div style="text-align:right;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:${p===allAths.length?'#5EC85E':'var(--gold)'};">${p}</div><div style="font-size:9px;color:rgba(250,250,248,0.3);text-transform:uppercase;letter-spacing:1px;">Present</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${saved?`<span style="background:rgba(42,107,42,0.2);color:#5EC85E;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;border:1px solid rgba(42,107,42,0.3);">✓ Saved</span>`:''}
+          <div style="text-align:right;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:${p===allAths.length?'#5EC85E':'var(--gold)'};">${p}</div><div style="font-size:9px;color:rgba(250,250,248,0.3);text-transform:uppercase;letter-spacing:1px;">Present</div></div>
+        </div>
       </div>
       <div style="padding:10px 14px;background:var(--p2);border-bottom:1px solid var(--bdr);display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <button class="btn" style="font-size:10px;padding:5px 12px;" onclick="window.K.markAll('${cls.id}','present')">✅ All Present</button>
         <button class="btn" style="font-size:10px;padding:5px 12px;" onclick="window.K.markAll('${cls.id}','absent')">❌ All Absent</button>
-        <button class="btn" style="font-size:10px;padding:5px 12px;" onclick="window.K.openModal('addMakeupModal',{classId:'${cls.id}'})">+ Makeup</button>
-        <button class="btn primary" style="font-size:10px;padding:5px 16px;margin-left:auto;" onclick="window.K.saveAtt('${cls.id}')" ${saved?'':''}>${saved?'✓ Saved':'Save Attendance ☁️'}</button>
+        ${isToday?`<button class="btn" style="font-size:10px;padding:5px 12px;" onclick="window.K.openModal('addMakeupModal',{classId:'${cls.id}'})">+ Makeup</button>`:''}
+        <button class="btn primary" style="font-size:10px;padding:5px 16px;margin-left:auto;" onclick="${isToday?`window.K.saveAtt('${cls.id}')`:`window.K.saveAttHistory('${viewDate}','${cls.id}')`}">Save ☁️</button>
       </div>
-      <div>${allAths.length===0?`<div style="padding:24px;text-align:center;color:var(--t3);">No athletes enrolled in this class.</div>`
-      :allAths.map((a,i)=>{const isMakeup=makeups.includes(a);const status=clsState[i];const isP=status!=='absent';return`<div class="att-row" id="ar_${cls.id}_${i}" style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--bdr2);">
+      <div>${allAths.length===0?`<div style="padding:24px;text-align:center;color:var(--t3);">No athletes in this class.</div>`
+      :allAths.map((a,i)=>{const isMakeup=makeups.includes(a);const isP=clsState[i]!=='absent';return`<div class="att-row" id="ar_${cls.id}_${i}" style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--bdr2);">
         <div class="mini-av" style="${isMakeup?'border:1.5px solid var(--gold);':''}">${isMakeup?'🔄':ini(a.name)}</div>
-        <div style="flex:1;"><div style="font-size:14px;font-weight:600;">${a.name}${isMakeup?` <span style="font-size:10px;color:var(--gold);">(Makeup)</span>`:''}</div><div style="font-size:11px;color:var(--t3);">${a.level||'Level 1'}</div></div>
+        <div style="flex:1;"><div style="font-size:14px;font-weight:600;">${a.name}${(isMakeup||a._isMakeup)?` <span style="background:rgba(181,153,106,0.15);color:var(--gold);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:4px;border:1px solid rgba(181,153,106,0.3);">MAKEUP</span>`:''}</div><div style="font-size:11px;color:var(--t3);">${a.level||'Level 1'}</div></div>
         <div style="display:flex;gap:6px;">
           <button onclick="window.K.setAtt('${cls.id}',${i},'present')" style="padding:7px 16px;border-radius:7px;border:2px solid ${isP?'var(--green)':'var(--bdr)'};background:${isP?'var(--g-soft)':'transparent'};font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;color:${isP?'var(--green)':'var(--t3)'};transition:all 0.12s;" class="att-btn ${isP?'sel-p':''}">✓ Present</button>
           <button onclick="window.K.setAtt('${cls.id}',${i},'absent')" style="padding:7px 16px;border-radius:7px;border:2px solid ${!isP?'var(--red)':'var(--bdr)'};background:${!isP?'var(--r-soft)':'transparent'};font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;color:${!isP?'var(--red)':'var(--t3)'};transition:all 0.12s;" class="att-btn ${!isP?'sel-a':''}">✗ Absent</button>
         </div>
       </div>`;}).join('')}</div>
-      ${saved?`<div style="padding:12px 16px;background:var(--g-soft);border-top:1px solid rgba(42,107,42,0.15);"><button class="btn primary full" onclick="window.K.startSkills('${cls.id}')">Continue to Skills Tracker →</button></div>`:''}
+      ${saved&&isToday?`<div style="padding:12px 16px;background:var(--g-soft);border-top:1px solid rgba(42,107,42,0.15);"><button class="btn primary full" onclick="window.K.startSkills('${cls.id}')">Continue to Skills Tracker →</button></div>`:''}
     </div>`;}).join('')}`;
 }
 
@@ -174,17 +230,60 @@ export function coachSched(){
   const my=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid);
   const open=(APP.subRequests||[]).filter(r=>r.status==='open');
   const myPending=(APP.subRequests||[]).filter(r=>r.requestedBy===uid&&!['confirmed','denied'].includes(r.status));
-  const subConfirms=(APP.messages||[]).filter(m=>m.type==='sub_confirm_request'&&!m.read&&m.toId===uid);
   const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const calcAge=dob=>{if(!dob)return null;const b=new Date(dob);const a=Math.floor((new Date()-b)/(365.25*24*3600*1000));return isNaN(a)||a<0||a>30?null:a;};
+  const sel=window._schedSel||null;
+
+  const classDetail=cls=>{
+    const aths=APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).sort((a,b)=>a.name.localeCompare(b.name));
+    return`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+      <div style="background:#1C1C1C;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+        <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:#FAFAF8;">${cls.name}</div>
+        <div style="font-size:12px;color:rgba(250,250,248,0.4);margin-top:3px;">📅 ${cls.day} · ${cls.time} · 🎓 ${cls.level}</div></div>
+        <button onclick="window._schedSel=null;window.K.nav('coachSched')" style="background:transparent;border:1px solid rgba(181,153,106,0.3);color:rgba(250,250,248,0.5);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;">✕ Close</button>
+      </div>
+      ${cls.notes?`<div style="padding:12px 20px;background:rgba(181,153,106,0.06);border-bottom:1px solid var(--bdr);font-size:13px;color:var(--t2);">📝 ${cls.notes}</div>`:''}
+      <div style="padding:14px 20px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);">Athletes (${aths.length}/${cls.cap||8})</div>
+        <button class="btn" style="font-size:10px;padding:4px 10px;" onclick="window.K.openModal('addMakeupModal',{classId:'${cls.id}'})">+ Makeup</button>
+      </div>
+      ${aths.length===0?`<div style="padding:24px;text-align:center;color:var(--t3);">No athletes enrolled yet.</div>`
+      :aths.map(a=>{const age=calcAge(a.dob);return`<div style="display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--bdr2);">
+        <div class="mini-av">${ini(a.name)}</div>
+        <div style="flex:1;"><div style="font-size:14px;font-weight:600;">${a.name}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:2px;">${a.level||'Level 1'}${age!==null?' · '+age+' yrs old':''}${a.dob?' · DOB: '+new Date(a.dob+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}${a.medical?` · <span style="color:var(--red);">⚠️ ${a.medical}</span>`:''}</div></div>
+      </div>`;}).join('')}
+    </div>`;
+  };
+
   return`
-  ${subConfirms.length?`<div class="alert warn" style="display:flex;align-items:center;justify-content:space-between;"><span>🔔 Sub approval needed</span><button class="btn primary" style="font-size:11px;" onclick="window.K.nav('coachMsgs')">Respond →</button></div>`:''}
   <div class="sec-hdr"><h3>My Schedule</h3><button class="btn primary" onclick="window.K.openModal('subReqModal')">Request Sub</button></div>
-  ${days.map(day=>{const dc=my.filter(c=>c.day===day).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));if(!dc.length)return'';return`<div style="margin-bottom:16px;"><div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);opacity:0.7;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--bdr);">${day}</div><div class="g2">${dc.map(c=>`<div class="class-card"><div style="display:flex;justify-content:space-between;"><div class="cn" style="font-size:13px;">${c.name}</div><span class="pill gold-p">${c.time}</span></div><div class="cm" style="margin-top:5px;"><span>👧 ${(c.athletes||[]).length}</span><span>${c.level}</span></div></div>`).join('')}</div></div>`;}).join('')}
-  ${myPending.length?`<div class="sec-hdr" style="margin-top:8px;"><h3>My Sub Requests</h3></div>${myPending.map(r=>`<div class="class-card" style="margin-bottom:8px;"><div class="cn" style="font-size:13px;">${r.className}</div><div class="ct">${r.date}</div><span class="pill ${r.status==='confirmed'?'present':'ip'}">${{pending:'Waiting for director',open:'Posted',claimed:'Director reviewing',awaiting_original:'Awaiting your OK',confirmed:'Confirmed'}[r.status]||r.status}</span></div>`).join('')}`:''} 
+  ${sel?classDetail(APP.allClasses.find(c=>c.id===sel)||{name:'Not found',athletes:[]}):''}
+  ${days.map(day=>{
+    const dc=my.filter(c=>c.day===day).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
+    if(!dc.length)return'';
+    return`<div style="margin-bottom:18px;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);opacity:0.7;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--bdr);">${day}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">${dc.map(c=>{
+        const aths=APP.allAthletes.filter(a=>(c.athletes||[]).includes(a.id));
+        const isSelected=sel===c.id;
+        return`<div onclick="window._schedSel='${c.id}';window.K.nav('coachSched')" style="background:var(--panel);border:2px solid ${isSelected?'var(--gold)':'var(--bdr)'};border-left:4px solid var(--gold);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all 0.15s;box-shadow:0 1px 4px rgba(0,0,0,0.04);" onmouseover="this.style.borderColor='var(--gold)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='${isSelected?'var(--gold)':'var(--bdr)'}';this.style.transform=''">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;">${c.name}</div>
+            <div style="font-size:12px;color:var(--t2);margin-top:3px;display:flex;gap:10px;">
+              <span>🕐 ${c.time}</span><span>🎓 ${c.level}</span><span>👧 ${aths.length}/${c.cap||8} athletes</span>
+            </div></div>
+            <span style="font-size:12px;color:var(--gold);font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:1px;">${isSelected?'▲ Close':'▼ View Roster'}</span>
+          </div>
+        </div>`;}).join('')}</div>
+    </div>`;
+  }).join('')}
+  ${myPending.length?`<div class="sec-hdr" style="margin-top:8px;"><h3>My Sub Requests</h3></div>${myPending.map(r=>`<div style="background:var(--panel);border:1px solid var(--bdr);border-left:3px solid var(--gold);border-radius:10px;padding:12px 16px;margin-bottom:8px;"><div style="font-size:13px;font-weight:700;">${r.className}</div><div style="font-size:12px;color:var(--t2);">${r.date}</div><span class="pill ip" style="margin-top:4px;">${{pending:'Waiting for director',open:'Posted to board',claimed:'Director reviewing',awaiting_original:'Awaiting your approval',confirmed:'Confirmed ✓'}[r.status]||r.status}</span></div>`).join('')}`:``}
   <div class="sec-hdr" style="margin-top:8px;"><h3>Open Sub Board</h3></div>
   ${open.length===0?`<div class="empty-state compact"><div class="es-icon">🔄</div><h3>No open requests</h3></div>`
-  :open.filter(r=>r.requestedBy!==uid).map(r=>{const belts=['Foundation','Level 1','Level 2','Level 3','Level 4','Level 5','Xcel Bronze','Xcel Silver','Xcel Gold','Xcel Platinum'];const canSub=belts.indexOf(APP.profile?.belt||'Foundation')>=belts.indexOf(r.requiredBelt||'Level 1')||(APP.profile?.certifications||[]).includes(r.requiredBelt||'Level 1');return`<div class="class-card" style="margin-bottom:10px;${!canSub?'opacity:0.5;':''}"><div style="display:flex;justify-content:space-between;"><div class="cn" style="font-size:13px;">${r.className}</div><span class="pill ${canSub?'gold-p':'absent'}">${canSub?'Open':'🔒 Locked'}</span></div><div class="cm" style="margin-top:5px;"><span>📅 ${r.date}</span><span>🎓 ${r.requiredBelt||'Level 1'}+</span></div>${!canSub?`<div class="alert danger" style="margin-top:8px;padding:6px 10px;font-size:11px;">Requires ${r.requiredBelt||'Level 1'} certification</div>`:`<button class="btn primary full" style="margin-top:10px;" onclick="window.K.claimSub('${r.id}')">I'll Take This Class →</button>`}</div>`;}).join('')}`;
+  :open.filter(r=>r.requestedBy!==uid).map(r=>{const belts=['Foundation','Level 1','Level 2','Level 3','Level 4','Level 5','Xcel Bronze','Xcel Silver','Xcel Gold','Xcel Platinum'];const canSub=belts.indexOf(APP.profile?.belt||'Foundation')>=belts.indexOf(r.requiredBelt||'Level 1')||(APP.profile?.certifications||[]).includes(r.requiredBelt||'Level 1');return`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:14px;font-weight:700;">${r.className}</div><span class="pill ${canSub?'gold-p':'absent'}">${canSub?'You qualify':'🔒 Need '+r.requiredBelt}</span></div><div style="font-size:12px;color:var(--t2);margin-bottom:8px;">📅 ${r.date} · 🎓 ${r.requiredBelt||'Level 1'}+</div>${canSub?`<button class="btn primary full" onclick="window.K.claimSub('${r.id}')">I'll Take This Class →</button>`:`<div class="alert warn" style="font-size:12px;margin:0;">Complete ${r.requiredBelt||'Level 1'} certification to qualify</div>`}</div>`;}).join('')}`;
 }
+
 
 export function coachMsgs(){
   const uid=APP.user?.uid;
@@ -378,4 +477,55 @@ export function coachRoutines(){
     <div style="flex:1;"><div style="font-size:14px;font-weight:700;">${r.name||'Routine'}</div><div style="font-size:12px;color:var(--t2);margin-top:2px;">${r.className||'All Classes'}${r.level?' · '+r.level:''}</div>${r.notes?`<div style="font-size:12px;color:var(--t3);margin-top:3px;">${r.notes}</div>`:''}</div>
     <div style="display:flex;gap:6px;">${r.videoUrl?`<a href="${r.videoUrl}" target="_blank" class="btn primary" style="font-size:10px;padding:5px 10px;">▶ Video</a>`:''} ${r.audioUrl?`<a href="${r.audioUrl}" target="_blank" class="btn" style="font-size:10px;padding:5px 10px;">♪ Audio</a>`:''}<button class="btn danger" style="font-size:10px;padding:5px 10px;" onclick="window.K.deleteRoutine('${r.id}')">Delete</button></div>
   </div>`).join('')}</div>`}`;
+}
+
+export function coachCerts(){
+  const p=APP.profile||{};
+  const BELT_LEVELS=['Foundation','Level 1','Level 2','Level 3','Level 4','Level 5','Xcel Bronze','Xcel Silver','Xcel Gold','Xcel Platinum'];
+  const BELT_COLORS_MAP={'Foundation':'#E8E8E8','Level 1':'#E8C84A','Level 2':'#E8894A','Level 3':'#4A9B6F','Level 4':'#4A7AB8','Level 5':'#7B5EA7','Xcel Bronze':'#CD8B4A','Xcel Silver':'#A8A9AD','Xcel Gold':'#B5996A','Xcel Platinum':'#8BA9BE'};
+  const earned=[...new Set([...(p.certifications||[]),p.belt].filter(Boolean))].filter(l=>BELT_LEVELS.includes(l));
+  const today=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+  if(earned.length===0)return`<div class="empty-state"><div class="es-icon">🏅</div><h3>No Certifications Yet</h3><p>Complete KINETIC certification courses to earn instructor certificates for each level.</p></div>`;
+
+  return`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+    <div><h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:20px;">My Certifications</h2><p style="font-size:13px;color:var(--t2);margin-top:3px;">${earned.length} certificate${earned.length!==1?'s':''} earned</p></div>
+    <button class="btn primary" onclick="window.print()">🖨️ Print All Certificates</button>
+  </div>
+  <div class="alert info" style="margin-bottom:20px;font-size:13px;">These certificates verify your completion of KINETIC instructor training for each gymnastics level. Print and display them in your facility.</div>
+  <div id="certsContainer">${earned.map(level=>{
+    const col=BELT_COLORS_MAP[level]||'#B5996A';
+    const isDark=level==='Foundation'||level.includes('Xcel');
+    return`<div class="cert-card" data-level="${level}" style="background:linear-gradient(135deg,#1C1C1C 0%,#1a1a2e 100%);border:2px solid ${col};border-radius:16px;padding:40px 48px;margin-bottom:20px;position:relative;overflow:hidden;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+      <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:${col}0A;pointer-events:none;"></div>
+      <div style="position:absolute;bottom:-60px;left:-40px;width:160px;height:160px;border-radius:50%;background:${col}06;pointer-events:none;"></div>
+      <div style="border:1px solid ${col}40;border-radius:12px;padding:32px 40px;position:relative;">
+        <div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:14px;letter-spacing:8px;color:${col};text-transform:uppercase;margin-bottom:20px;">KINETIC</div>
+        <div style="width:60px;height:2px;background:linear-gradient(90deg,transparent,${col},transparent);margin:0 auto 20px;"></div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:rgba(250,250,248,0.4);margin-bottom:16px;">Certificate of Completion</div>
+        <div style="font-family:'Barlow',sans-serif;font-size:14px;color:rgba(250,250,248,0.5);margin-bottom:12px;font-style:italic;">This certifies that</div>
+        <div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:32px;color:#FAFAF8;letter-spacing:1px;margin-bottom:12px;">${p.name||'Coach'}</div>
+        <div style="font-family:'Barlow',sans-serif;font-size:14px;color:rgba(250,250,248,0.5);margin-bottom:6px;">has successfully completed</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:16px 0 20px;">
+          <div style="width:16px;height:16px;border-radius:50%;background:${col};box-shadow:0 0 12px ${col}80;"></div>
+          <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:${col};">${level} Instructor Certification</div>
+          <div style="width:16px;height:16px;border-radius:50%;background:${col};box-shadow:0 0 12px ${col}80;"></div>
+        </div>
+        <div style="font-family:'Barlow',sans-serif;font-size:13px;color:rgba(250,250,248,0.4);margin-bottom:24px;">and is authorized to instruct athletes in ${level} gymnastics skills<br>under the KINETIC Coaching Framework</div>
+        <div style="width:60px;height:2px;background:linear-gradient(90deg,transparent,${col},transparent);margin:0 auto 20px;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;text-align:center;">
+          <div><div style="font-size:11px;color:rgba(250,250,248,0.3);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:6px;">Issued</div><div style="font-size:12px;color:rgba(250,250,248,0.6);">${today}</div></div>
+          <div><div style="font-size:11px;color:rgba(250,250,248,0.3);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:6px;">Platform</div><div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;color:${col};">KINETIC</div></div>
+          <div><div style="font-size:11px;color:rgba(250,250,248,0.3);text-transform:uppercase;letter-spacing:2px;font-family:'Barlow Condensed',sans-serif;font-weight:700;margin-bottom:6px;">Gym</div><div style="font-size:12px;color:rgba(250,250,248,0.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${APP.gymProfile?.name||'—'}</div></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('')}</div>
+  <style>@media print{
+    body *{visibility:hidden!important;}
+    #certsContainer,#certsContainer *{visibility:visible!important;}
+    #certsContainer{position:fixed;top:0;left:0;width:100%;padding:20px;}
+    .cert-card{page-break-after:always;margin:0 0 0 0!important;border-radius:0!important;}
+  }</style>`;
 }
