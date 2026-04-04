@@ -21,7 +21,7 @@ export function dirHome(){
   const concerns=APP.coachConcerns||[];
   const name=(APP.profile?.name||'Director').split(' ')[0];
   const h=new Date().getHours();
-  const greeting=h<12?'Good morning':'h<17?Good afternoon':'Good evening';
+  const greeting=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
   const gymName=APP.gymProfile?.name||'Your Gym';
 
   return `
