@@ -210,40 +210,123 @@ export function coachProfile(){
 }
 
 export function library(lv='all',ev='all'){
-  const lvls=['Foundation','Level 1'];const evts=['All','Vault','Bars','Beam','Floor','General'];
+  const lvls=['Foundation','Level 1'];
+  const evts=['All','Vault','Bars','Beam','Floor','General'];
+  const evColors={Vault:'#C25B30',Bars:'#2E5FA3',Beam:'#7B4FA0',Floor:'#2A6B2A',General:'#B5996A'};
+  const evIcons={Vault:'🏃',Bars:'🤸',Beam:'🧘',Floor:'⭐',General:'🥋'};
   const filtered=SKILLS.filter(s=>(lv==='all'||s.level===lv)&&(ev==='all'||ev==='All'||s.event===ev));
-  return`<div class="sec-hdr"><h3>Skill Library</h3></div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${['All',...lvls].map(l=>`<button class="btn ${(lv==='all'&&l==='All')||(lv===l)?'primary':''}" onclick="window.APP.libLevel='${l==='All'?'all':l}';window.K.nav('library')">${l}</button>`).join('')}</div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${evts.map(e=>`<button class="btn ${(ev==='all'&&e==='All')||(ev===e)?'primary':''}" onclick="window.APP.libEvent='${e==='All'?'all':e}';window.K.nav('library')">${e}</button>`).join('')}</div>
-  <div class="card"><div class="card-body">${filtered.length===0?`<div style="padding:24px;text-align:center;color:var(--t3);">No skills found for this filter.</div>`:filtered.map(s=>`<div class="ps-row" onclick="window.K.nav('skill_${s.id}')">
-    <span style="font-size:18px;width:28px;">${{Vault:'🏃',Bars:'🤸',Beam:'🧘',Floor:'⭐',General:'🥋'}[s.event]||'🥋'}</span>
-    <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${s.name}</div><div style="font-size:11px;color:var(--t3);">${s.level} · ${s.event}</div></div>
-    <span class="pill ${s.spot==='TRUE SPOT'?'absent':s.spot==='DO NOT SPOT'?'not-r':'present'}" style="margin-right:8px;font-size:9px;">${s.spot}</span>
-    <span style="color:var(--gold);font-size:16px;">→</span>
-  </div>`).join('')}</div></div>`;
+  const grouped={};filtered.forEach(s=>{if(!grouped[s.event])grouped[s.event]=[];grouped[s.event].push(s);});
+  const spotBadge=s=>s.spot==='TRUE SPOT'
+    ?`<span style="background:rgba(155,58,47,0.15);color:var(--red);border:1px solid rgba(155,58,47,0.25);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:4px;white-space:nowrap;">⚠️ True Spot</span>`
+    :s.spot==='DO NOT SPOT'
+    ?`<span style="background:rgba(0,0,0,0.06);color:var(--t3);border:1px solid var(--bdr);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:4px;white-space:nowrap;">🚫 No Spot</span>`
+    :`<span style="background:var(--g-soft);color:var(--green);border:1px solid rgba(42,107,42,0.2);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:4px;white-space:nowrap;">✅ Form Spot</span>`;
+  return`
+  <div style="background:#1C1C1C;border-radius:14px;padding:20px 24px;margin-bottom:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div><div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:20px;color:#FAFAF8;">Skill Library</div>
+      <div style="font-size:12px;color:rgba(250,250,248,0.4);margin-top:3px;">${filtered.length} skill${filtered.length!==1?'s':''} · USAG Reference</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${['All',...lvls].map(l=>{const active=(lv==='all'&&l==='All')||(lv===l);return`<button onclick="window.APP.libLevel='${l==='All'?'all':l}';window.K.nav('library')" style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:7px 14px;border-radius:6px;cursor:pointer;border:1px solid ${active?'var(--gold)':'rgba(181,153,106,0.2)'};background:${active?'var(--gold)':'transparent'};color:${active?'var(--sb)':'rgba(250,250,248,0.5)'};transition:all 0.15s;">${l}</button>`;}).join('')}</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;">${evts.map(e=>{const active=(ev==='all'&&e==='All')||(ev===e);const color=evColors[e]||'var(--gold)';return`<button onclick="window.APP.libEvent='${e==='All'?'all':e}';window.K.nav('library')" style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:7px 14px;border-radius:6px;cursor:pointer;border:1px solid ${active?color:'rgba(255,255,255,0.1)'};background:${active?color+'22':'transparent'};color:${active?color:'rgba(250,250,248,0.4)'};transition:all 0.15s;">${evIcons[e]||''} ${e}</button>`;}).join('')}</div>
+  </div>
+  ${filtered.length===0?`<div class="empty-state"><div class="es-icon">🔍</div><h3>No skills found</h3><p>Try a different filter.</p></div>`
+  :Object.entries(grouped).map(([evt,skills])=>{
+    const col=evColors[evt]||'var(--gold)';
+    return`<div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:32px;height:32px;border-radius:8px;background:${col}22;border:1px solid ${col}44;display:flex;align-items:center;justify-content:center;font-size:16px;">${evIcons[evt]||'🥋'}</div>
+        <div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;">${evt}</div><div style="font-size:11px;color:var(--t3);">${skills.length} skill${skills.length!==1?'s':''}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
+        ${skills.map(s=>`<div onclick="window.K.nav('skill_${s.id}')" style="background:var(--panel);border:1px solid var(--bdr);border-left:3px solid ${col};border-radius:10px;padding:14px 16px;cursor:pointer;transition:all 0.15s;box-shadow:0 1px 4px rgba(0,0,0,0.04);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 24px rgba(0,0,0,0.1)';this.style.borderColor='${col}'" onmouseout="this.style.transform='';this.style.boxShadow='0 1px 4px rgba(0,0,0,0.04)';this.style.borderColor='var(--bdr)';this.style.borderLeftColor='${col}'">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;">
+            <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;line-height:1.3;">${s.name}</div>
+            <span style="color:${col};font-size:16px;flex-shrink:0;">→</span>
+          </div>
+          ${s.mantra?`<div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${col};margin-bottom:8px;">${s.mantra}</div>`:''}
+          <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px;">${s.correct}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            ${spotBadge(s)}
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--t3);">${s.level}</span>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('')}`;
 }
 
 export function skillDetail(id){
   const s=SKILLS.find(x=>x.id===id);
   if(!s)return`<div class="alert warn">Skill not found.</div><button class="btn primary" onclick="window.K.nav('library')">← Library</button>`;
-  const sc=s.spot==='TRUE SPOT'?'true':s.spot==='DO NOT SPOT'?'none':'form';
-  const sCol={form:'var(--green)',true:'var(--red)',none:'#7A1A0F'};
-  return`<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;"><button class="btn" onclick="window.K.nav('library')">← Library</button><div><h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:22px;">${s.name}</h2><div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-top:3px;">${s.level} · ${s.event}</div></div></div>
-  ${s.mantra?`<div style="background:rgba(181,153,106,0.1);border:1px solid rgba(181,153,106,0.25);border-radius:8px;padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;gap:12px;"><span style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);opacity:0.6;white-space:nowrap;">Mantra</span><span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;">${s.mantra}</span></div>`:''}
-  <div style="background:#EDE0CB;border:1px solid var(--gold);border-radius:8px;padding:14px 18px;margin-bottom:16px;"><span style="font-size:9px;text-transform:uppercase;letter-spacing:2px;color:rgba(28,28,28,0.45);font-family:'Barlow Condensed',sans-serif;font-weight:700;">Correct Position · </span><span style="font-size:14px;font-weight:700;color:#1C1C1C;line-height:1.6;">${s.correct}</span></div>
-  <div class="g2">
-    <div>
-      <div class="card" style="margin-bottom:14px;"><div class="card-hdr" style="background:#1C1C1C;"><h4 style="color:var(--gold);">Coaching Cues</h4></div><div style="padding:14px;background:#FFF9F0;">${s.cues.split('·').map(c=>`<div style="font-size:14px;color:#7A5C2E;font-style:italic;padding:5px 0;border-bottom:1px solid rgba(181,153,106,0.15);">"${c.trim()}"</div>`).join('')}</div></div>
-      <div class="card"><div class="card-hdr" style="background:#1C1C1C;"><h4 style="color:var(--gold);">Teaching Drill</h4></div><div style="padding:14px;font-size:13px;line-height:1.7;background:var(--p2);">${s.drill}</div></div>
+  const evColors={Vault:'#C25B30',Bars:'#2E5FA3',Beam:'#7B4FA0',Floor:'#2A6B2A',General:'#B5996A'};
+  const evIcons={Vault:'🏃',Bars:'🤸',Beam:'🧘',Floor:'⭐',General:'🥋'};
+  const col=evColors[s.event]||'var(--gold)';
+  const isTrue=s.spot==='TRUE SPOT';
+  const isNone=s.spot==='DO NOT SPOT';
+  return`
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+    <button class="btn" onclick="window.K.nav('library')">← Library</button>
+    <div style="display:flex;align-items:center;gap:8px;font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);">
+      <span style="color:${col};">${evIcons[s.event]||'🥋'} ${s.event}</span>
+      <span>·</span><span>${s.level}</span>
     </div>
-    <div>
-      <div class="card" style="margin-bottom:14px;"><div class="card-hdr" style="background:#1C1C1C;"><h4 style="color:var(--gold);">Common Errors & Fixes</h4></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;background:var(--p2);">${['Error','Say This Instead'].map(h=>`<div style="padding:8px 12px;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);">${h}</div>`).join('')}</div>
-        ${s.errors.map(e=>`<div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--bdr2);"><div style="padding:9px 12px;font-size:12px;font-weight:700;">${e.e}</div><div style="padding:9px 12px;font-size:12px;color:var(--green);font-weight:600;">"${e.f}"</div></div>`).join('')}
-      </div>
-      <div class="card"><div style="padding:12px 14px;font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:${sCol[sc]};">${sc==='true'?'⚠️ TRUE SPOT — Required':sc==='none'?'🚫 DO NOT SPOT':'✅ Form Spot Only'}</div>${s.spotWarning?`<div style="padding:12px 14px;font-size:12px;font-weight:700;color:var(--red);border-left:3px solid var(--red);">${s.spotWarning}</div>`:''}${s.safetyNote?`<div style="padding:12px 14px;font-size:12px;color:var(--red);">⚠️ ${s.safetyNote}</div>`:''}</div>
+  </div>
+
+  ${isTrue?`<div style="background:linear-gradient(135deg,#3A0A0A,#5A1010);border:2px solid rgba(155,58,47,0.5);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;"><span style="font-size:24px;">⚠️</span><div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;color:#FF8A80;">TRUE SPOT REQUIRED</div><div style="font-size:12px;color:rgba(255,138,128,0.7);margin-top:3px;">${s.spotWarning||'You are physically supporting this athlete.'}</div></div></div>`:''}
+  ${isNone?`<div style="background:rgba(0,0,0,0.08);border:1px solid var(--bdr);border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">🚫</span><div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--t3);">Do Not Spot This Skill</div></div>`:''}
+
+  <div style="background:#1C1C1C;border-radius:14px;padding:22px 24px;margin-bottom:20px;position:relative;overflow:hidden;">
+    <div style="position:absolute;right:-20px;top:-20px;width:100px;height:100px;border-radius:50%;background:${col}18;"></div>
+    <div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:26px;color:#FAFAF8;margin-bottom:6px;">${s.name}</div>
+    ${s.mantra?`<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:4px;text-transform:uppercase;color:${col};margin-bottom:14px;">${s.mantra}</div>`:''}
+    <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:14px 16px;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:rgba(250,250,248,0.3);margin-bottom:6px;">Correct Position</div>
+      <div style="font-size:14px;font-weight:600;color:#FAFAF8;line-height:1.65;">${s.correct}</div>
     </div>
-  </div>`;
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+    <div style="background:linear-gradient(135deg,#FFF9F0,#FFF4E6);border:1px solid rgba(181,153,106,0.3);border-radius:12px;padding:18px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><div style="width:28px;height:28px;border-radius:8px;background:rgba(181,153,106,0.2);display:flex;align-items:center;justify-content:center;font-size:14px;">💬</div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;color:#7A5C2E;">Coaching Cues</div></div>
+      ${s.cues.split('·').map(c=>`<div style="font-size:14px;color:#7A5C2E;font-weight:600;font-style:italic;padding:8px 0;border-bottom:1px solid rgba(181,153,106,0.2);">"${c.trim()}"</div>`).join('')}
+    </div>
+    <div style="background:var(--p2);border:1px solid var(--bdr);border-radius:12px;padding:18px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><div style="width:28px;height:28px;border-radius:8px;background:rgba(42,107,42,0.1);display:flex;align-items:center;justify-content:center;font-size:14px;">🏋️</div><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;">Teaching Drill</div></div>
+      <div style="font-size:13px;color:var(--t2);line-height:1.7;">${s.drill}</div>
+    </div>
+  </div>
+
+  <div style="background:var(--panel);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;margin-bottom:14px;">
+    <div style="background:#1C1C1C;padding:12px 18px;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:16px;">⚡</span>
+      <span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:#FAFAF8;">Common Errors & Coaching Fixes</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;background:var(--p2);border-bottom:1px solid var(--bdr);">
+      <div style="padding:8px 16px;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--red);">Error / What You'll See</div>
+      <div style="padding:8px 16px;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--green);">Say This Instead</div>
+    </div>
+    ${s.errors.map((e,i)=>`<div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--bdr2);background:${i%2===0?'var(--panel)':'var(--p2)'};">
+      <div style="padding:12px 16px;"><div style="font-size:13px;font-weight:700;color:var(--red);">${e.e}</div>${e.c?`<div style="font-size:11px;color:var(--t3);margin-top:4px;">Drill: ${e.c}</div>`:''}</div>
+      <div style="padding:12px 16px;font-size:13px;color:var(--green);font-weight:600;font-style:italic;">"${e.f}"</div>
+    </div>`).join('')}
+  </div>
+
+  ${s.deductions&&s.deductions.length?`
+  <div style="background:linear-gradient(135deg,#1a0a0a,#2a1010);border:1px solid rgba(155,58,47,0.3);border-radius:12px;padding:16px 20px;margin-bottom:14px;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:rgba(255,138,128,0.6);margin-bottom:10px;">⚖️ USAG Deductions</div>
+    ${s.deductions.map(d=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(155,58,47,0.15);"><span style="font-size:12px;color:rgba(250,250,248,0.7);">${d.d}</span><span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;color:#FF8A80;">${d.v}</span></div>`).join('')}
+  </div>`:''} 
+
+  ${s.principle?`
+  <div style="background:linear-gradient(135deg,${col}15,${col}08);border:1px solid ${col}30;border-radius:12px;padding:16px 20px;display:flex;align-items:flex-start;gap:14px;">
+    <div style="width:36px;height:36px;border-radius:10px;background:${col}22;border:1px solid ${col}44;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">💡</div>
+    <div><div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:${col};opacity:0.7;margin-bottom:5px;">Coaching Principle</div>
+    <div style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px;color:var(--t);">${s.principle}</div></div>
+  </div>`:''} 
+
+  ${s.safetyNote?`<div class="alert danger" style="margin-top:14px;"><strong>⚠️ Safety:</strong> ${s.safetyNote}</div>`:''}
+  `;
 }
 
 export function lessonPlans(){
