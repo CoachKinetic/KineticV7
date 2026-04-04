@@ -6,6 +6,7 @@ function locked(msg){return`<div class="alert warn">🔒 ${msg}</div><button cla
 function sessionStatus(cls){const s=APP.sessionState?.[cls.id]||{};if(s.notesDone)return{label:'✓ Complete',color:'var(--green)',step:'done'};if(s.skillsDone)return{label:'Notes Needed',color:'var(--blue)',step:'notes'};if(s.attDone)return{label:'Skills Ready',color:'var(--gold)',step:'skills'};return{label:'Not Started',color:'var(--t3)',step:'att'};}
 
 export function coachDash(){
+  if(APP.simpleMode)return coachDashSimple();
   if(APP.simpleMode)return simpleHome();
   const uid=APP.user?.uid;
   const my=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid);
@@ -198,32 +199,35 @@ export function coachSkills(){
 }
 
 export function coachNotes(){
-  if(!APP.clockedIn)return locked('Clock in first.');
-  const cls=APP.activeSkillClass?APP.allClasses.find(c=>c.id===APP.activeSkillClass):APP.selectedClass;
-  const clsName=cls?.name||'Class';
-  const aths=cls?APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)):[];
-  const histMode=APP.notesHistDate&&APP.notesHistDate!==new Date().toISOString().split('T')[0];
+  if(!APP.clockedIn&&!APP.activeSkillClass)return locked('Start a class session first.');
+  const cls=APP.selectedClass||APP.allClasses.find(c=>c.id===APP.activeSkillClass)||{name:'General',id:'gen'};
+  const uid=APP.user?.uid;
+  const todayStr=new Date().toISOString().split('T')[0];
+  const notesDate=APP.notesViewDate||todayStr;
+  const isToday=notesDate===todayStr;
+
+  // Load past notes into display
+  const histNote=APP.notesHistory?.[notesDate+'_'+(cls.id||'gen')];
+  const cn=isToday?(APP.classNotes||''):(histNote?.classNotes||'');
+  const inn=isToday?(APP.issueNotes||''):(histNote?.issueNotes||'');
+
   return`
-  <div class="sec-hdr"><h3>Notes — ${clsName}</h3>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <input type="date" class="fi" style="width:auto;font-size:12px;padding:5px 10px;" value="${APP.notesHistDate||new Date().toISOString().split('T')[0]}" onchange="window.APP.notesHistDate=this.value;window.K.loadNotesHistory(this.value,'${cls?.id||'gen'}')">
-      <button class="btn" onclick="window.APP.notesHistDate=null;window.K.nav('coachNotes')">Today</button>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+    <div><h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:18px;">Class Notes</h2><div style="font-size:12px;color:var(--t3);">${cls.name}${!isToday?' · Viewing past':'·  Today'}</div></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <button class="btn" onclick="(async()=>{const myClasses=window.APP.allClasses.filter(c=>(c.coaches||[]).includes(window.APP.user?.uid)||c.coachId===window.APP.user?.uid);const today=new Date();const prev=new Date(today);prev.setDate(prev.getDate()-7);for(let i=0;i<21;i++){const d=new Date(prev);d.setDate(prev.getDate()-i);const ds=d.toISOString().split('T')[0];const classId=window.APP.activeSkillClass||'gen';try{const snap=await window._db_getDoc(window._db_doc(window._db,'notes/'+window.APP.user?.uid+'_'+ds+'_'+classId));if(snap.exists()){const dat=snap.data();window.APP.notesHistory=window.APP.notesHistory||{};window.APP.notesHistory[ds+'_'+classId]=dat;window.APP.notesViewDate=ds;window.K.nav('coachNotes');return;}}catch(e){}}window.toast('No previous notes found','warn');})()" style="font-size:10px;padding:6px 12px;white-space:nowrap;">See Last Notes ↩</button>
+      <button class="btn" onclick="window.APP.notesViewDate=new Date(new Date('${notesDate}T12:00').getTime()-86400000).toISOString().split('T')[0];window.K.loadNotesHistory(window.APP.notesViewDate,window.APP.activeSkillClass||'gen')">‹</button>
+      <input type="date" class="fi" style="width:auto;font-size:12px;padding:5px 10px;" value="${notesDate}" max="${todayStr}" onchange="window.APP.notesViewDate=this.value;window.K.loadNotesHistory(this.value,window.APP.activeSkillClass||'gen')">
+      <button class="btn ${isToday?'primary':''}" onclick="window.APP.notesViewDate=null;window.K.nav('coachNotes')">Today</button>
     </div>
   </div>
-  ${histMode?`<div class="alert info">📅 Read-only history.</div>`:''}
-  <div class="alert info" style="font-size:12px;">Class notes are shared with your director. Private notes are only visible to you.</div>
-  <div class="g2">
-    <div class="card"><div class="card-hdr"><h4>Class Notes</h4></div><div style="padding:14px;">
-      <div class="fg"><label class="fl">What did you work on?</label><textarea class="ft" id="cnTa" placeholder="Today we focused on..." ${histMode?'readonly':''} style="min-height:80px;">${APP.classNotes}</textarea></div>
-      <div class="fg"><label class="fl">Concerns for director?</label><textarea class="ft" id="inTa" placeholder="Nothing to flag..." ${histMode?'readonly':''} style="min-height:60px;">${APP.issueNotes}</textarea></div>
-      ${!histMode?`<button class="btn primary full" onclick="window.K.saveNotes()" ${APP.notesSaved?'disabled':''}>${APP.notesSaved?'✓ Saved':'Save Notes ☁️'}</button>`:''}</div></div>
-    <div class="card"><div class="card-hdr"><h4>Private Athlete Notes</h4></div><div style="padding:14px;">
-      <p style="font-size:12px;color:var(--t3);margin-bottom:12px;">🔒 Only visible to you.</p>
-      ${aths.length===0?`<div style="font-size:13px;color:var(--t3);">No athletes in class.</div>`:aths.map((a,i)=>`<div class="fg"><label class="fl">${a.name}</label><input class="fi" ${histMode?'readonly':''} placeholder="Notes for ${a.name.split(' ')[0]}..." value="${APP.privateNotes[i]||''}" oninput="window.APP.privateNotes[${i}]=this.value"></div>`).join('')}
-    </div></div>
-  </div>
-  ${APP.notesSaved&&!histMode?`<button class="btn primary full" onclick="window.APP.sessionState=window.APP.sessionState||{};window.APP.sessionState['${cls?.id||'gen'}']={...(window.APP.sessionState['${cls?.id||'gen'}']||{}),notesDone:true};window.K.nav('coachDash')">✓ Session Complete — Back to Dashboard</button>`:''}`;
+  ${!isToday?`<div class="alert info" style="margin-bottom:14px;font-size:12px;">📅 Viewing notes from ${new Date(notesDate+'T12:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}. ${histNote?'':'No notes saved for this date.'}</div>`:''}
+  <div class="fg"><label class="fl">Class Notes</label><textarea class="ft" id="cnTa" style="min-height:130px;" placeholder="What did you work on today? Wins, corrections, focus areas...">${cn}</textarea></div>
+  <div class="fg"><label class="fl">Concerns / Flag for Director</label><textarea class="ft" id="inTa" style="min-height:80px;" placeholder="Anything the director should know about? (injuries, behavior, billing concerns)">${inn}</textarea></div>
+  <button class="btn primary full" style="margin-top:4px;" onclick="window.K.saveNotes()">Save Notes ☁️</button>
+  ${APP.notesSaved&&isToday?`<div style="margin-top:10px;"><div class="alert ok">✓ Notes saved! Your director can see flagged items.</div></div>`:''}`;
 }
+
 
 export function coachSched(){
   const uid=APP.user?.uid;
@@ -454,7 +458,13 @@ export function lessonPlans(){
 }
 
 export function coachDocuments(){
-  const docs=(APP.allDocuments||[]).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  const uid=APP.user?.uid;
+  const myClassIds=(APP.allClasses||[]).filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid).map(c=>c.id);
+  const docs=(APP.allDocuments||[]).filter(d=>{
+    if(d.sharedWith==='all')return true;
+    if(d.sharedWith==='class'&&(d.sharedWithIds||[]).some(id=>myClassIds.includes(id)))return true;
+    return false; // 'athlete'-only docs are parent-facing only
+  }).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
   const icons={'pdf':'📄','image':'🖼️','video':'🎥','form':'📋','link':'🔗','other':'📎'};
   return`<div class="sec-hdr"><h3>Documents</h3></div>
   <div class="alert info" style="font-size:12px;">📎 Documents shared by your director. Click to open.</div>
@@ -528,4 +538,38 @@ export function coachCerts(){
     #certsContainer{position:fixed;top:0;left:0;width:100%;padding:20px;}
     .cert-card{page-break-after:always;margin:0 0 0 0!important;border-radius:0!important;}
   }</style>`;
+}
+
+export function coachDashSimple(){
+  const uid=APP.user?.uid;
+  const today=new Date().toLocaleDateString('en-US',{weekday:'long'});
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
+  const myClasses=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid);
+  const todayClasses=myClasses.filter(c=>c.day===today).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
+  const nextClass=todayClasses.find(c=>timeToMin(c.time)-nowMin>-90)||null;
+  const elapsed=APP.clockInTime?Math.floor((now-APP.clockInTime)/60000):0;
+
+  return`
+  <div style="background:#1C1C1C;border-radius:16px;padding:28px 24px;margin-bottom:16px;text-align:center;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(181,153,106,0.5);margin-bottom:6px;">${today}</div>
+    <div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:48px;color:var(--gold);" id="liveClock">${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</div>
+    ${APP.clockedIn?`<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;"><div style="width:8px;height:8px;border-radius:50%;background:#5EC85E;animation:pulse 2s infinite;"></div><span style="font-size:13px;color:#5EC85E;font-weight:600;">Clocked In · ${elapsed>=60?Math.floor(elapsed/60)+'h '+(elapsed%60)+'m':elapsed+'m'}</span></div>
+    <button onclick="window.K.clockOut()" style="margin-top:16px;background:var(--r-soft);border:1px solid rgba(155,58,47,0.3);color:var(--red);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:10px 28px;border-radius:8px;cursor:pointer;width:100%;">Clock Out</button>`
+    :`<button onclick="window.K.clockIn()" style="margin-top:20px;background:var(--gold);border:none;color:var(--sb);font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;padding:16px 40px;border-radius:10px;cursor:pointer;width:100%;">Clock In</button>`}
+  </div>
+
+  ${nextClass?`<div style="background:var(--panel);border:2px solid var(--gold);border-radius:14px;padding:20px 24px;margin-bottom:12px;text-align:center;cursor:pointer;" onclick="window.K.startSession('${nextClass.id}')">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">${timeToMin(nextClass.time)-nowMin<=0?'NOW':'Next Class'}</div>
+    <div style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:22px;margin-bottom:4px;">${nextClass.name}</div>
+    <div style="font-size:14px;color:var(--t2);">${nextClass.time} · ${(nextClass.athletes||[]).length} athletes</div>
+    <div style="background:var(--gold);color:var(--sb);font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;padding:12px;border-radius:8px;margin-top:16px;">Start Class →</div>
+  </div>`:APP.clockedIn?`<div class="empty-state compact"><div class="es-icon">✅</div><h3>No more classes today</h3></div>`:''}
+
+  ${todayClasses.filter(c=>c!==nextClass).map(c=>`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="window.K.startSession('${c.id}')"><div><div style="font-size:14px;font-weight:700;">${c.name}</div><div style="font-size:12px;color:var(--t3);">${c.time} · ${(c.athletes||[]).length} athletes</div></div><span style="color:var(--gold);">→</span></div>`).join('')}
+
+  <div style="background:rgba(181,153,106,0.06);border:1px solid rgba(181,153,106,0.15);border-radius:10px;padding:12px 16px;margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:13px;color:var(--t2);">Exit Simple Mode</span>
+    <button onclick="window.APP.simpleMode=false;window.renderNav&&window.renderNav();window.render&&window.render();" style="background:transparent;border:1px solid var(--bdr);color:var(--t3);font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:5px 12px;border-radius:5px;cursor:pointer;">Full View</button>
+  </div>`;
 }

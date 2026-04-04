@@ -226,7 +226,9 @@ export function dirBilling(){
     <td style="font-size:12px;color:var(--t2);">${a.billingCycle||'Monthly'}</td>
     <td><span class="pill ${a.tuitionStatus==='paid'?'present':a.tuitionStatus==='overdue'?'absent':'ip'}">${a.tuitionStatus||'Pending'}</span></td>
     <td style="white-space:nowrap;"><button class="btn" style="font-size:10px;padding:3px 8px;margin-right:4px;" onclick="window.K.openModal('editTuitionModal',{id:'${a.id}'})">Edit</button><button class="btn" style="font-size:10px;padding:3px 8px;" onclick="window.K.sendTuitionReminder('${a.id}')">📨</button></td>
-  </tr>`).join('')}</tbody></table></div>`;
+  </tr>`).join('')}</tbody></table></div>
+  ${(APP.allCharges||[]).length>0?`<div class="sec-hdr" style="margin-top:20px;"><h3>Additional Charges</h3></div>
+  <div class="card"><table class="table"><thead><tr><th>Athlete</th><th>Type</th><th>Amount</th><th>Description</th><th>Date</th></tr></thead><tbody>${(APP.allCharges||[]).map(c=>{const a=APP.allAthletes.find(x=>x.id===c.athId)||{name:c.athId==='all'?'All Athletes':'Unknown'};return`<tr><td><div class="name-cell"><div class="mini-av">${ini(a.name)}</div>${a.name}</div></td><td style="font-size:12px;">${c.type||'Other'}</td><td><span style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--gold);">$${c.amount||0}</span></td><td style="font-size:12px;color:var(--t2);">${c.desc||'—'}</td><td style="font-size:11px;color:var(--t3);">${c.createdAt?new Date(c.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'—'}</td></tr>`;}).join('')}</tbody></table></div>`:``}`;
 }
 
 export function dirSubs(){
@@ -435,4 +437,34 @@ export function dirAnalytics(){
       ${classes.sort((a,b)=>pct((b.athletes||[]).length,b.cap||8)-pct((a.athletes||[]).length,a.cap||8)).map(c=>{const f=pct((c.athletes||[]).length,c.cap||8);return`<tr><td style="font-weight:600;">${c.name}</td><td style="font-size:12px;">${c.coachName||'TBD'}</td><td style="font-size:12px;">${c.day}</td><td><div style="display:flex;align-items:center;gap:8px;"><div style="width:80px;height:5px;background:var(--bg);border-radius:3px;overflow:hidden;"><div style="height:100%;border-radius:3px;background:${f>=90?'var(--red)':f>=70?'var(--gold)':'var(--green)'};width:${f}%;"></div></div><span style="font-size:12px;font-weight:700;color:var(--t2);">${(c.athletes||[]).length}/${c.cap||8}</span></div></td><td><div class="belt-b"><div class="belt-d" style="background:${BELT_COLORS[c.level||'Level 1']};"></div>${c.level||'—'}</div></td></tr>`;}).join('')}
     </tbody></table>
   </div>`;
+}
+
+export function dirCertCourses(){
+  const coaches=APP.allCoaches||[];
+  const LEVELS=['Foundation','Level 1','Level 2','Level 3','Level 4','Level 5','Xcel Bronze','Xcel Silver','Xcel Gold','Xcel Platinum'];
+  const COLORS={'Foundation':'#E8E8E8','Level 1':'#E8C84A','Level 2':'#E8894A','Level 3':'#4A9B6F','Level 4':'#4A7AB8','Level 5':'#7B5EA7','Xcel Bronze':'#CD8B4A','Xcel Silver':'#A8A9AD','Xcel Gold':'#B5996A','Xcel Platinum':'#8BA9BE'};
+  if(!coaches.length)return`<div class="empty-state"><div class="es-icon">🏅</div><h3>No coaches yet</h3><p>Invite coaches to track their certification progress.</p></div>`;
+  return`
+  <div class="sec-hdr"><h3>Certification Progress</h3></div>
+  <div class="alert info" style="font-size:13px;margin-bottom:20px;">Coaches earn certifications by completing KINETIC training for each level. Their current belt + certifications are shown below.</div>
+  <div style="display:flex;flex-direction:column;gap:10px;">${coaches.map(c=>{
+    const belts=[...(c.certifications||[]),c.belt].filter(Boolean);
+    const earned=[...new Set(belts)];
+    const maxIdx=Math.max(...earned.map(l=>LEVELS.indexOf(l)).filter(i=>i>=0));
+    const pct=maxIdx>=0?Math.round((maxIdx+1)/LEVELS.length*100):0;
+    return`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+        <div class="user-av" style="width:44px;height:44px;font-size:15px;">${ini(c.name)}</div>
+        <div style="flex:1;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;">${c.name}</div><div style="font-size:12px;color:var(--t2);">${c.email||''}</div></div>
+        <button class="btn" style="font-size:10px;padding:5px 12px;" onclick="window.K.openModal('editCoachModal',{id:'${c.id}'})">Edit Certs</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+        ${LEVELS.slice(0,7).map(l=>{const has=earned.includes(l);return`<div style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;background:${has?'rgba(42,107,42,0.08)':'rgba(0,0,0,0.03)'};border:1px solid ${has?'rgba(42,107,42,0.2)':'var(--bdr)'};">
+          <div style="width:8px;height:8px;border-radius:50%;background:${has?COLORS[l]||'#B5996A':'var(--bdr)'};"></div>
+          <span style="font-size:11px;font-weight:${has?700:400};color:${has?'var(--green)':'var(--t3)'};">${l}</span>
+          ${has?`<span style="font-size:10px;">✓</span>`:''}
+        </div>`;}).join('')}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;height:5px;background:var(--bg);border-radius:3px;overflow:hidden;"><div style="height:100%;border-radius:3px;background:var(--gold);width:${pct}%;"></div></div><span style="font-size:11px;font-weight:700;color:var(--t3);">${earned.length} level${earned.length!==1?'s':''} certified</span></div>
+    </div>`;}).join('')}`;
 }
