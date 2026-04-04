@@ -103,8 +103,73 @@ async function loadAll(){
 
 async function loadParentData(){
   if(APP.role!=='parent'||!APP.gymId)return;
-  APP.parentSkillData=APP.parentSkillData||{};APP.parentSkillUpdated=APP.parentSkillUpdated||{};
-  try{for(const ath of(APP.parentAthletes||[])){const myClasses=(APP.allClasses||[]).filter(c=>(c.athletes||[]).includes(ath.id));for(const cls of myClasses){try{const snap=await getDocs(query(collection(db,'skills'),where('classId','==',cls.id)));let latest='',state={};snap.docs.forEach(d=>{const dat=d.data();if((dat.date||'')>latest){latest=dat.date||'';state=dat.skills||{};}});const athIdx=(cls.athletes||[]).indexOf(ath.id);if(athIdx>-1&&state[athIdx]){if(!APP.parentSkillData[ath.id])APP.parentSkillData[ath.id]={};Object.assign(APP.parentSkillData[ath.id],state[athIdx]);APP.parentSkillUpdated[ath.id]=latest;}}catch(e){}}}}catch(e){}
+  APP.parentSkillData={};APP.parentSkillUpdated={};APP.parentAttendance={};APP.parentCharges=[];
+
+  // Also try lowercase email match for athletes
+  const email=APP.user?.email||'';
+  if(!APP.parentAthletes||APP.parentAthletes.length===0){
+    try{
+      const pa=await getDocs(query(collection(db,'athletes'),where('parentEmail','==',email.toLowerCase())));
+      if(!pa.empty)APP.parentAthletes=pa.docs.map(d=>({id:d.id,...d.data()}));
+    }catch(e){}
+  }
+  if(!APP.parentAthletes||APP.parentAthletes.length===0)return;
+
+  // Load charges for this parent's athletes
+  try{
+    const ids=APP.parentAthletes.map(a=>a.id);
+    APP.parentCharges=(APP.allCharges||[]).filter(c=>ids.includes(c.athId)||c.athId==='all');
+  }catch(e){}
+
+  for(const ath of APP.parentAthletes){
+    APP.parentSkillData[ath.id]={};
+    APP.parentAttendance[ath.id]={};
+    const myClasses=(APP.allClasses||[]).filter(c=>(c.athletes||[]).includes(ath.id));
+
+    for(const cls of myClasses){
+      // ── Skills ──
+      try{
+        const skillSnap=await getDocs(query(collection(db,'skills'),where('classId','==',cls.id)));
+        let latest='',best={};
+        skillSnap.docs.forEach(d=>{const dat=d.data();if((dat.date||'')>latest){latest=dat.date;best=dat.skills||{};}});
+        if(latest){
+          // skills stored as {athleteIndex: {skillId: status}}
+          const athIdx=(cls.athletes||[]).indexOf(ath.id);
+          const byIdx=athIdx>-1&&best[athIdx]?best[athIdx]:{};
+          // Also try by athId directly (newer format)
+          const byId=best[ath.id]||{};
+          APP.parentSkillData[ath.id]=Object.assign({},APP.parentSkillData[ath.id],byIdx,byId);
+          APP.parentSkillUpdated[ath.id]=latest;
+        }
+      }catch(e){console.warn('skill load',e);}
+
+      // ── Attendance ── generate expected doc IDs for last 12 weeks
+      try{
+        const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const target=days.indexOf(cls.day);
+        if(target<0)continue;
+        let present=0,total=0,sessions=[];
+        const now=new Date();
+        for(let w=0;w<12;w++){
+          const d=new Date(now);
+          const diff=((now.getDay()-target)+7)%7;
+          d.setDate(now.getDate()-diff-w*7);
+          if(d>now)continue;
+          const dateStr=d.toISOString().split('T')[0];
+          try{
+            const s=await getDoc(doc(db,'attendance/'+dateStr+'_'+cls.id));
+            if(s.exists()){
+              const dat=s.data();total++;
+              const isPresent=(dat.presentIds||[]).includes(ath.id)||(dat.makeupIds||[]).includes(ath.id);
+              if(isPresent)present++;
+              sessions.push({date:dateStr,status:isPresent?'present':'absent'});
+            }
+          }catch(e){}
+        }
+        APP.parentAttendance[ath.id][cls.id]={total,present,absent:total-present,sessions};
+      }catch(e){console.warn('att load',e);}
+    }
+  }
 }
 
 function showAuth(){hide('loadingScreen');show('authScreen');hide('obScreen');hide('appShell');}
@@ -433,6 +498,27 @@ async denyMakeupRequest(id){
     APP.makeupRequests=(APP.makeupRequests||[]).map(x=>x.id===id?{...x,status:'denied'}:x);
     toast('Denied — parent notified');render();
   }catch(e){toast('⚠️ '+e.message,'warn');}
+},
+async loadLastClassNotes(){
+  const uid=APP.user?.uid;
+  const classId=APP.activeSkillClass||'gen';
+  // Scan back up to 28 days for most recent notes entry
+  for(let i=1;i<=28;i++){
+    const d=new Date();d.setDate(d.getDate()-i);
+    const dateStr=d.toISOString().split('T')[0];
+    try{
+      const s=await getDoc(doc(db,'notes/'+uid+'_'+dateStr+'_'+classId));
+      if(s.exists()){
+        const dat=s.data();
+        if(!APP.notesHistory)APP.notesHistory={};
+        APP.notesHistory[dateStr+'_'+classId]=dat;
+        APP.notesViewDate=dateStr;
+        toast(`✓ Loaded notes from ${new Date(dateStr+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`);
+        render();return;
+      }
+    }catch(e){}
+  }
+  toast('No previous notes found for this class','warn');
 },
 async loadCoachAttHistory(){
   const uid=APP.user?.uid;
