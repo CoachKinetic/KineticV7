@@ -71,41 +71,57 @@ export function simpleHome(){
 export function coachAtt(){
   if(!APP.clockedIn)return locked('Clock in first to take attendance.');
   const uid=APP.user?.uid;
+  const today=new Date().toLocaleDateString('en-US',{weekday:'long'});
+  const todayStr=new Date().toISOString().split('T')[0];
   const my=APP.allClasses.filter(c=>(c.coaches||[]).includes(uid)||c.coachId===uid);
-  const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const today=APP.attDay||new Date().toLocaleDateString('en-US',{weekday:'long'});
-  const dayClasses=my.filter(c=>c.day===today).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
-  const histMode=APP.attHistDate&&APP.attHistDate!==new Date().toISOString().split('T')[0];
-  return`
-  <div class="sec-hdr"><h3>Attendance</h3>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <input type="date" class="fi" style="width:auto;font-size:12px;padding:5px 10px;" value="${APP.attHistDate||new Date().toISOString().split('T')[0]}" onchange="window.APP.attHistDate=this.value;window.K.nav('coachAtt')">
-      <button class="btn" onclick="window.APP.attHistDate=null;window.K.nav('coachAtt')">Today</button>
-    </div>
+  const todayClasses=my.filter(c=>c.day===today).sort((a,b)=>timeToMin(a.time)-timeToMin(b.time));
+
+  if(todayClasses.length===0)return`<div class="empty-state"><div class="es-icon">📅</div><h3>No classes today</h3><p>You have no classes scheduled for ${today}.</p><button class="btn primary" onclick="window.K.nav('coachSched')" style="margin-top:16px;">View Schedule →</button></div>`;
+
+  // Init att state for all today's classes
+  todayClasses.forEach(cls=>{
+    if(!APP.attState[cls.id]){APP.attState[cls.id]={};APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).forEach((_,i)=>{APP.attState[cls.id][i]='present';});}
+  });
+
+  return`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+    <h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:20px;">Today's Attendance</h2>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);">${today}</div>
   </div>
-  ${histMode?`<div class="alert info" style="margin-bottom:12px;">📅 Viewing history. Read-only.</div>`:''}
-  <div class="day-tabs">${days.map(d=>`<button class="day-tab ${today===d?'on':''}" onclick="window.APP.attDay='${d}';window.K.nav('coachAtt')">${d.slice(0,3)}</button>`).join('')}</div>
-  ${dayClasses.length===0?`<div class="empty-state compact"><div class="es-icon">📅</div><h3>No classes on ${today}</h3></div>`
-  :dayClasses.map(cls=>{const aths=APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id));const makeups=(APP.makeupAthletes?.[cls.id]||[]).map(m=>APP.allAthletes.find(a=>a.id===m.athId)).filter(Boolean);const allAths=[...aths,...makeups];const clsState=APP.attState[cls.id]||{};allAths.forEach((_,i)=>{if(clsState[i]===undefined)clsState[i]='present';});if(!histMode)APP.attState[cls.id]=clsState;const p=Object.values(clsState).filter(v=>v==='present').length;const saved=(APP.attSavedClasses||{})[cls.id];const ss=sessionStatus(cls);
-    return`<div class="card" style="margin-bottom:14px;">
-      <div class="card-hdr"><div><h4>${cls.name} ${ss.step!=='att'?`<span class="pill ${ss.step==='done'?'present':'ip'}" style="font-size:9px;">${ss.label}</span>`:''}</h4><div style="font-size:11px;color:var(--t3);">${cls.time} · ${cls.level}</div></div>
-      <div style="display:flex;gap:5px;"><span class="pill present">${p} Present</span><span class="pill absent">${allAths.length-p} Absent</span>${saved?`<span class="pill present" style="font-size:9px;">✓</span>`:''}</div></div>
-      ${!histMode?`<div style="padding:8px 14px;background:var(--p2);border-bottom:1px solid var(--bdr);display:flex;gap:6px;align-items:center;">
-        <button class="btn" style="font-size:10px;padding:4px 10px;" onclick="window.K.markAll('${cls.id}','present')">All Present</button>
-        <button class="btn" style="font-size:10px;padding:4px 10px;" onclick="window.K.markAll('${cls.id}','absent')">All Absent</button>
-        <button class="btn" style="font-size:10px;padding:4px 10px;" onclick="window.K.openModal('addMakeupModal',{classId:'${cls.id}'})">+ Makeup</button>
-        <button class="btn primary" style="font-size:10px;padding:4px 10px;margin-left:auto;" onclick="window.K.saveAtt('${cls.id}')" ${saved?'disabled':''}>${saved?'✓ Saved':'Save ☁️'}</button>
-      </div>`:''}
-      <div class="card-body">${allAths.length===0?`<div style="padding:20px;text-align:center;color:var(--t3);">No athletes yet.</div>`
-      :allAths.map((a,i)=>{const isMakeup=makeups.includes(a);return`<div class="att-row" id="ar_${cls.id}_${i}">
-        <div class="mini-av">${isMakeup?'🔄':ini(a.name)}</div>
-        <div class="att-name">${a.name}${isMakeup?` <span class="pill ip" style="font-size:9px;">Makeup</span>`:''}</div>
-        <div class="att-meta">${a.level||'Level 1'}</div>
-        ${histMode?`<span class="pill ${clsState[i]==='present'?'present':'absent'}">${clsState[i]==='present'?'Present':'Absent'}</span>`:`<div class="att-btns"><button class="att-btn ${clsState[i]==='present'?'sel-p':''}" onclick="window.K.setAtt('${cls.id}',${i},'present')">Present</button><button class="att-btn ${clsState[i]==='absent'?'sel-a':''}" onclick="window.K.setAtt('${cls.id}',${i},'absent')">Absent</button></div>`}
+  ${todayClasses.map(cls=>{
+    const aths=APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id));
+    const makeups=(APP.makeupAthletes?.[cls.id]||[]).map(m=>APP.allAthletes.find(a=>a.id===m.athId)).filter(Boolean);
+    const allAths=[...aths,...makeups];
+    const clsState=APP.attState[cls.id]||{};
+    const p=Object.values(clsState).filter(v=>v==='present').length;
+    const saved=(APP.attSavedClasses||{})[cls.id];
+    const now=new Date();const nowMin=now.getHours()*60+now.getMinutes();const minsUntil=timeToMin(cls.time)-nowMin;
+    const isNow=minsUntil<=0&&minsUntil>-90;const isSoon=minsUntil>0&&minsUntil<=20;
+    return`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+      <div style="background:#1C1C1C;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;">
+        <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:#FAFAF8;">${cls.name}</div>${isNow?`<span style="background:var(--gold);color:var(--sb);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:2px 8px;border-radius:10px;">NOW</span>`:isSoon?`<span style="background:rgba(181,153,106,0.2);color:var(--gold);font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid rgba(181,153,106,0.3);">In ${minsUntil}m</span>`:''}</div>
+        <div style="font-size:12px;color:rgba(250,250,248,0.4);">${cls.time} · ${cls.level} · ${allAths.length} athletes</div></div>
+        <div style="display:flex;align-items:center;gap:8px;">${saved?`<span style="background:rgba(42,107,42,0.2);color:#5EC85E;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;border:1px solid rgba(42,107,42,0.3);">✓ Saved</span>`:''}
+        <div style="text-align:right;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:${p===allAths.length?'#5EC85E':'var(--gold)'};">${p}</div><div style="font-size:9px;color:rgba(250,250,248,0.3);text-transform:uppercase;letter-spacing:1px;">Present</div></div></div>
+      </div>
+      <div style="padding:10px 14px;background:var(--p2);border-bottom:1px solid var(--bdr);display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <button class="btn" style="font-size:10px;padding:5px 12px;" onclick="window.K.markAll('${cls.id}','present')">✅ All Present</button>
+        <button class="btn" style="font-size:10px;padding:5px 12px;" onclick="window.K.markAll('${cls.id}','absent')">❌ All Absent</button>
+        <button class="btn" style="font-size:10px;padding:5px 12px;" onclick="window.K.openModal('addMakeupModal',{classId:'${cls.id}'})">+ Makeup</button>
+        <button class="btn primary" style="font-size:10px;padding:5px 16px;margin-left:auto;" onclick="window.K.saveAtt('${cls.id}')" ${saved?'':''}>${saved?'✓ Saved':'Save Attendance ☁️'}</button>
+      </div>
+      <div>${allAths.length===0?`<div style="padding:24px;text-align:center;color:var(--t3);">No athletes enrolled in this class.</div>`
+      :allAths.map((a,i)=>{const isMakeup=makeups.includes(a);const status=clsState[i];const isP=status!=='absent';return`<div class="att-row" id="ar_${cls.id}_${i}" style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--bdr2);">
+        <div class="mini-av" style="${isMakeup?'border:1.5px solid var(--gold);':''}">${isMakeup?'🔄':ini(a.name)}</div>
+        <div style="flex:1;"><div style="font-size:14px;font-weight:600;">${a.name}${isMakeup?` <span style="font-size:10px;color:var(--gold);">(Makeup)</span>`:''}</div><div style="font-size:11px;color:var(--t3);">${a.level||'Level 1'}</div></div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="window.K.setAtt('${cls.id}',${i},'present')" style="padding:7px 16px;border-radius:7px;border:2px solid ${isP?'var(--green)':'var(--bdr)'};background:${isP?'var(--g-soft)':'transparent'};font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;color:${isP?'var(--green)':'var(--t3)'};transition:all 0.12s;" class="att-btn ${isP?'sel-p':''}">✓ Present</button>
+          <button onclick="window.K.setAtt('${cls.id}',${i},'absent')" style="padding:7px 16px;border-radius:7px;border:2px solid ${!isP?'var(--red)':'var(--bdr)'};background:${!isP?'var(--r-soft)':'transparent'};font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;color:${!isP?'var(--red)':'var(--t3)'};transition:all 0.12s;" class="att-btn ${!isP?'sel-a':''}">✗ Absent</button>
+        </div>
       </div>`;}).join('')}</div>
-      ${!histMode&&saved?`<div style="padding:10px 14px;background:var(--g-soft);border-top:1px solid rgba(42,107,42,0.2);"><button class="btn primary full" style="font-size:12px;" onclick="window.K.startSkills('${cls.id}')">✓ Done — Continue to Skills →</button></div>`:''}
+      ${saved?`<div style="padding:12px 16px;background:var(--g-soft);border-top:1px solid rgba(42,107,42,0.15);"><button class="btn primary full" onclick="window.K.startSkills('${cls.id}')">Continue to Skills Tracker →</button></div>`:''}
     </div>`;}).join('')}`;
 }
+
 
 export function coachSkills(){
   if(!APP.clockedIn)return locked('Clock in first.');
@@ -336,4 +352,30 @@ export function lessonPlans(){
   return`<div class="sec-hdr"><h3>Lesson Plans</h3></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">${Object.keys(bc).slice(0,6).map(l=>`<button class="btn ${sel===l?'primary':''}" onclick="window.APP.lessonLevel='${l}';window.K.nav('lessons')" style="display:flex;align-items:center;gap:5px;"><div style="width:8px;height:8px;border-radius:50%;background:${bc[l]};"></div>${l}</button>`).join('')}</div>
   <div class="g3">${weeks.map((t,i)=>`<div class="class-card" onclick="window.K.openModal('lpModal',{week:${i+1},level:'${sel}',title:'${t}'})"><div style="font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Week ${i+1}</div><div class="cn" style="font-size:13px;">${t}</div></div>`).join('')}</div>`;
+}
+
+export function coachDocuments(){
+  const docs=(APP.allDocuments||[]).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  const icons={'pdf':'📄','image':'🖼️','video':'🎥','form':'📋','link':'🔗','other':'📎'};
+  return`<div class="sec-hdr"><h3>Documents</h3></div>
+  <div class="alert info" style="font-size:12px;">📎 Documents shared by your director. Click to open.</div>
+  ${docs.length===0?`<div class="empty-state"><div class="es-icon">📄</div><h3>No documents yet</h3><p>Your director will share important documents here.</p></div>`
+  :`<div style="display:flex;flex-direction:column;gap:8px;">${docs.map(d=>`<div onclick="${d.fileUrl?`window.open('${d.fileUrl}','_blank')`:'return'}" style="background:var(--panel);border:1px solid var(--bdr);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:14px;${d.fileUrl?'cursor:pointer;':''}transition:all 0.15s;box-shadow:0 1px 4px rgba(0,0,0,0.04);" onmouseover="${d.fileUrl?"this.style.borderColor='var(--gold)'":""}" onmouseout="this.style.borderColor='var(--bdr)'">
+    <div style="width:44px;height:44px;border-radius:10px;background:rgba(181,153,106,0.1);border:1px solid rgba(181,153,106,0.2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">${icons[d.fileType||'other']||'📎'}</div>
+    <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${d.name||'Document'}</div>${d.description?`<div style="font-size:12px;color:var(--t2);margin-top:2px;">${d.description}</div>`:''}
+    <div style="font-size:11px;color:var(--t3);margin-top:4px;">${d.createdAt?new Date(d.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}</div></div>
+    ${d.fileUrl?`<span style="color:var(--gold);font-size:20px;">↗</span>`:''}
+  </div>`).join('')}</div>`}`;
+}
+
+export function coachRoutines(){
+  const routines=(APP.allRoutines||[]).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  return`<div class="sec-hdr"><h3>Routines & Media</h3><button class="btn primary" onclick="window.K.openModal('uploadRoutineModal')">+ Add Routine</button></div>
+  <div class="alert info" style="font-size:12px;">🎬 Coaches can upload and manage routine videos and floor music. Parents will see these in their portal.</div>
+  ${routines.length===0?`<div class="empty-state"><div class="es-icon">🎬</div><h3>No routines yet</h3><p>Upload your first routine video or floor music link.</p><button class="btn primary" style="margin-top:16px;" onclick="window.K.openModal('uploadRoutineModal')">Upload Routine →</button></div>`
+  :`<div style="display:flex;flex-direction:column;gap:8px;">${routines.map(r=>`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+    <div style="width:44px;height:44px;border-radius:10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">🎬</div>
+    <div style="flex:1;"><div style="font-size:14px;font-weight:700;">${r.name||'Routine'}</div><div style="font-size:12px;color:var(--t2);margin-top:2px;">${r.className||'All Classes'}${r.level?' · '+r.level:''}</div>${r.notes?`<div style="font-size:12px;color:var(--t3);margin-top:3px;">${r.notes}</div>`:''}</div>
+    <div style="display:flex;gap:6px;">${r.videoUrl?`<a href="${r.videoUrl}" target="_blank" class="btn primary" style="font-size:10px;padding:5px 10px;">▶ Video</a>`:''} ${r.audioUrl?`<a href="${r.audioUrl}" target="_blank" class="btn" style="font-size:10px;padding:5px 10px;">♪ Audio</a>`:''}<button class="btn danger" style="font-size:10px;padding:5px 10px;" onclick="window.K.deleteRoutine('${r.id}')">Delete</button></div>
+  </div>`).join('')}</div>`}`;
 }

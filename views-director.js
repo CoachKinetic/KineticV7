@@ -353,3 +353,77 @@ export function msgInbox(msgs,role){
   if(!msgs||msgs.length===0)return`<div class="empty-state compact"><div class="es-icon">📭</div><h3>Nothing here yet</h3></div>`;
   return msgList(msgs,me,role);
 }
+
+export function dirAnalytics(){
+  const aths=APP.allAthletes||[];
+  const coaches=APP.allCoaches||[];
+  const classes=APP.allClasses||[];
+  const timecards=APP.allTimecards||[];
+  const messages=APP.messages||[];
+  const now=new Date();
+  const monthAgo=new Date(now-30*86400000).toISOString();
+  const weekAgo=new Date(now-7*86400000).toISOString();
+
+  // Revenue breakdown
+  const rev=aths.reduce((s,a)=>s+(a.tuitionAmount||185),0);
+  const paid=aths.filter(a=>a.tuitionStatus==='paid');
+  const overdue=aths.filter(a=>a.tuitionStatus==='overdue');
+  const collectionRate=aths.length?Math.round(paid.length/aths.length*100):0;
+
+  // Hours this month
+  const calcMins=tcs=>tcs.filter(t=>t.duration).reduce((s,t)=>{const p=t.duration?.match(/(\d+)h\s*(\d+)m/);if(p)return s+parseInt(p[1])*60+parseInt(p[2]);const q=t.duration?.match(/(\d+)m/);return s+(q?parseInt(q[1]):0);},0);
+  const monthMins=calcMins(timecards.filter(t=>t.clockIn>=monthAgo));
+  const weekMins=calcMins(timecards.filter(t=>t.clockIn>=weekAgo));
+  const fmtH=m=>`${Math.floor(m/60)}h ${m%60}m`;
+
+  // Class capacity
+  const totalCap=classes.reduce((s,c)=>s+(c.cap||8),0);
+  const totalFilled=classes.reduce((s,c)=>s+(c.athletes||[]).length,0);
+  const fillRate=totalCap?Math.round(totalFilled/totalCap*100):0;
+
+  // Coach hours breakdown
+  const coachHours=coaches.map(c=>{const tcs=timecards.filter(t=>t.coachId===c.id&&t.clockIn>=monthAgo);const m=calcMins(tcs);return{...c,mins:m,sessions:tcs.length};}).sort((a,b)=>b.mins-a.mins);
+
+  // Level breakdown
+  const levels={};aths.forEach(a=>{const l=a.level||'Level 1';levels[l]=(levels[l]||0)+1;});
+
+  return`
+  <div class="sec-hdr"><h3>Analytics</h3><span style="font-size:12px;color:var(--t3);">Last 30 days</span></div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;">
+    ${[
+      {l:'Collection Rate',v:collectionRate+'%',sub:`${paid.length}/${aths.length} paid`,c:collectionRate>=80?'var(--green)':collectionRate>=60?'var(--gold)':'var(--red)'},
+      {l:'Monthly Revenue',v:'$'+fmt(rev),sub:`${overdue.length} overdue`,c:'var(--gold)'},
+      {l:'Roster Fill Rate',v:fillRate+'%',sub:`${totalFilled}/${totalCap} spots filled`,c:fillRate>=80?'var(--green)':'var(--gold)'},
+      {l:'Coach Hours / Mo',v:fmtH(monthMins),sub:`${fmtH(weekMins)} this week`,c:'#60A5FA'},
+    ].map(s=>`<div class="stat"><div class="sl">${s.l}</div><div class="sv" style="font-size:22px;color:${s.c};">${s.v}</div><div class="ssub">${s.sub}</div></div>`).join('')}
+  </div>
+
+  <div class="g2">
+    <div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-hdr"><h4>Athletes by Level</h4></div>
+        <div style="padding:16px;">${Object.entries(levels).sort((a,b)=>b[1]-a[1]).map(([l,n])=>{const pct=aths.length?Math.round(n/aths.length*100):0;return`<div style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;margin-bottom:5px;"><div style="display:flex;align-items:center;gap:6px;"><div class="belt-d" style="background:${BELT_COLORS[l]||'#E8E8E8'};width:10px;height:10px;"></div><span style="font-size:13px;font-weight:600;">${l}</span></div><span style="font-size:13px;font-weight:700;">${n}</span></div><div style="height:5px;background:var(--bg);border-radius:3px;overflow:hidden;"><div style="height:100%;border-radius:3px;background:${BELT_COLORS[l]||'var(--gold)'};width:${pct}%;"></div></div></div>`;}).join('')}</div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-hdr"><h4>Coach Hours This Month</h4></div>
+        <div>${coachHours.length===0?`<div style="padding:24px;text-align:center;color:var(--t3);">No data yet.</div>`
+        :coachHours.map((c,i)=>`<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--bdr2);">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;color:var(--t3);width:18px;">${i+1}</div>
+          <div class="mini-av">${ini(c.name)}</div>
+          <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${c.name}</div><div style="font-size:11px;color:var(--t3);">${c.sessions} session${c.sessions!==1?'s':''}</div></div>
+          <span style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--gold);">${fmtH(c.mins)}</span>
+        </div>`).join('')}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr"><h4>Class Performance</h4></div>
+    <table class="table"><thead><tr><th>Class</th><th>Coach</th><th>Day</th><th>Roster Fill</th><th>Level</th></tr></thead><tbody>
+      ${classes.sort((a,b)=>pct((b.athletes||[]).length,b.cap||8)-pct((a.athletes||[]).length,a.cap||8)).map(c=>{const f=pct((c.athletes||[]).length,c.cap||8);return`<tr><td style="font-weight:600;">${c.name}</td><td style="font-size:12px;">${c.coachName||'TBD'}</td><td style="font-size:12px;">${c.day}</td><td><div style="display:flex;align-items:center;gap:8px;"><div style="width:80px;height:5px;background:var(--bg);border-radius:3px;overflow:hidden;"><div style="height:100%;border-radius:3px;background:${f>=90?'var(--red)':f>=70?'var(--gold)':'var(--green)'};width:${f}%;"></div></div><span style="font-size:12px;font-weight:700;color:var(--t2);">${(c.athletes||[]).length}/${c.cap||8}</span></div></td><td><div class="belt-b"><div class="belt-d" style="background:${BELT_COLORS[c.level||'Level 1']};"></div>${c.level||'—'}</div></td></tr>`;}).join('')}
+    </tbody></table>
+  </div>`;
+}

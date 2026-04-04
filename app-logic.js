@@ -2,9 +2,9 @@ import { auth, db, APP, SKILLS, BELT_COLORS, BELT_LEVELS, ini, toast, sync } fro
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { doc, setDoc, getDoc, collection, addDoc, getDocs, deleteDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, library, skillDetail, lessonPlans } from './views-coach.js?v=800';
-import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance, dirDocuments, dirRoutines } from './views-director.js?v=800';
-import { parentHome, parentSkills, parentTuition, parentMsgs, parentDocuments } from './views-parent.js?v=800';
+import { coachDash, coachAtt, coachSkills, coachNotes, coachSched, coachMsgs, coachProfile, coachDocuments, coachRoutines, library, skillDetail, lessonPlans } from './views-coach.js?v=800';
+import { dirHome, dirSched, dirAthletes, dirCoaches, dirTimecards, dirMsgs, dirBilling, dirSubs, dirInjuries, dirAttendance, dirDocuments, dirRoutines, dirAnalytics } from './views-director.js?v=800';
+import { parentHome, parentSkills, parentTuition, parentMsgs, parentDocuments, parentRoutines } from './views-parent.js?v=800';
 
 window.APP=APP;
 const FC={apiKey:"AIzaSyCmG-MfINmp1rMQOsXGNmRkBxJROSdqyqk",authDomain:"kinetic-a4862.firebaseapp.com",projectId:"kinetic-a4862",storageBucket:"kinetic-a4862.firebasestorage.app",messagingSenderId:"924145283660",appId:"1:924145283660:web:f1135f7000d9e4897f7ae9"};
@@ -104,7 +104,14 @@ async function loadParentData(){
 
 function showAuth(){hide('loadingScreen');show('authScreen');hide('obScreen');hide('appShell');}
 function showOb(){hide('loadingScreen');hide('authScreen');show('obScreen');hide('appShell');renderOb(1);}
-function showApp(){hide('loadingScreen');hide('authScreen');hide('obScreen');$('appShell').style.display='flex';initApp();if(APP.role==='coach')startNotificationWatcher();if(APP.profile?.firstLogin)setTimeout(()=>K.openModal('changePwModal'),800);}
+function showApp(){
+  hide('loadingScreen');hide('authScreen');hide('obScreen');
+  if(APP.role==='coach'){
+    const activeTC=(APP.myTimecards||[]).find(t=>t.status==='active'&&t.coachId===APP.user?.uid);
+    if(activeTC){APP.clockedIn=true;APP.clockSessionId=activeTC.id;APP.clockInTime=activeTC.clockIn?new Date(activeTC.clockIn):new Date();if(activeTC.classId){const cls=APP.allClasses.find(c=>c.id===activeTC.classId);if(cls){APP.selectedClass={...cls,athleteObjects:APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id))};APP.activeSkillClass=activeTC.classId;}}}
+  }
+  $('appShell').style.display='flex';initApp();if(APP.role==='coach')startNotificationWatcher();if(APP.profile?.firstLogin)setTimeout(()=>K.openModal('changePwModal'),800);
+}
 
 function renderOb(step){
   obStep=step;
@@ -123,9 +130,9 @@ const MOB_NAV={
   parent:[{i:'🏠',l:'Home',v:'parentHome'},{i:'🥋',l:'Skills',v:'parentSkills'},{i:'💳',l:'Tuition',v:'parentTuition'},{i:'💬',l:'Messages',v:'parentMsgs'},{i:'⋯',l:'More',v:'more'}],
 };
 const MOB_MORE={
-  coach:[{i:'📝',l:'Notes',v:'coachNotes'},{i:'📋',l:'Lessons',v:'lessons'},{i:'📚',l:'Skill Library',v:'library'},{i:'💬',l:'Messages',v:'coachMsgs'},{i:'👤',l:'Profile',v:'coachProfile'}],
-  director:[{i:'🧑‍🏫',l:'Coaches',v:'dirCoaches'},{i:'🔄',l:'Sub Requests',v:'dirSubs'},{i:'💰',l:'Tuition',v:'dirBilling'},{i:'⏱️',l:'Timecards',v:'dirTimecards'},{i:'📋',l:'Attendance',v:'dirAttendance'},{i:'📄',l:'Documents',v:'dirDocuments'},{i:'🎥',l:'Routines',v:'dirRoutines'},{i:'🚑',l:'Injury Log',v:'dirInjuries'}],
-  parent:[{i:'📄',l:'Documents',v:'parentDocuments'}],
+  coach:[{i:'📝',l:'Notes',v:'coachNotes'},{i:'📋',l:'Lessons',v:'lessons'},{i:'📚',l:'Skill Library',v:'library'},{i:'📄',l:'Documents',v:'coachDocuments'},{i:'🎥',l:'Routines',v:'coachRoutines'},{i:'💬',l:'Messages',v:'coachMsgs'},{i:'👤',l:'Profile',v:'coachProfile'}],
+  director:[{i:'🧑‍🏫',l:'Coaches',v:'dirCoaches'},{i:'🔄',l:'Sub Requests',v:'dirSubs'},{i:'💰',l:'Tuition',v:'dirBilling'},{i:'⏱️',l:'Timecards',v:'dirTimecards'},{i:'📊',l:'Analytics',v:'dirAnalytics'},{i:'📄',l:'Documents',v:'dirDocuments'},{i:'🎥',l:'Routines',v:'dirRoutines'},{i:'🚑',l:'Injury Log',v:'dirInjuries'}],
+  parent:[{i:'📄',l:'Documents',v:'parentDocuments'},{i:'🎥',l:'Routines',v:'parentRoutines'}],
 };
 
 function renderMobileNav(){
@@ -179,6 +186,27 @@ function initApp(){
   $('roleTag').textContent=r==='coach'?'Coach Portal':r==='director'?'Director Portal':'Parent Portal';
   $('uBelt').textContent=r==='parent'?(APP.parentAthletes?.map(a=>a.name.split(' ')[0]).join(' & ')||'Parent'):p.belt||'Foundation';
   $('smTog').style.display=r==='coach'?'flex':'none';
+  // Director sidebar live stats
+  const sbStats=$('sbStats');
+  if(sbStats){
+    if(r==='director'){
+      const rev=(APP.allAthletes||[]).reduce((s,a)=>s+(a.tuitionAmount||185),0);
+      const active=(APP.allTimecards||[]).filter(t=>t.status==='active');
+      const overdue=(APP.allAthletes||[]).filter(a=>a.tuitionStatus==='overdue').length;
+      const unread=(APP.messages||[]).filter(m=>m.fromId!==APP.user?.uid&&m.fromId!=='system'&&!m.read).length;
+      sbStats.style.display='block';
+      sbStats.innerHTML=`<div style="padding:10px 14px;border-top:1px solid rgba(181,153,106,0.12);">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(181,153,106,0.4);margin-bottom:8px;">Gym Overview</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:11px;color:rgba(250,250,248,0.4);">Monthly Rev</span><span style="font-size:11px;font-weight:700;color:var(--gold);">$${rev.toLocaleString()}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:11px;color:rgba(250,250,248,0.4);">Athletes</span><span style="font-size:11px;font-weight:700;color:rgba(250,250,248,0.7);">${(APP.allAthletes||[]).length}</span></div>
+        ${active.length>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:11px;color:rgba(250,250,248,0.4);">Clocked In</span><span style="font-size:11px;font-weight:700;color:#5EC85E;display:flex;align-items:center;gap:4px;"><span style="width:6px;height:6px;border-radius:50%;background:#5EC85E;display:inline-block;"></span>${active.length}</span></div>`:''}
+        ${overdue>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:11px;color:rgba(250,250,248,0.4);">Overdue</span><span style="font-size:11px;font-weight:700;color:#FF8A80;">${overdue}</span></div>`:''}
+        ${unread>0?`<div style="display:flex;justify-content:space-between;"><span style="font-size:11px;color:rgba(250,250,248,0.4);">Unread Msgs</span><span style="font-size:11px;font-weight:700;color:var(--gold);">${unread}</span></div>`:''}
+      </div>`;
+    } else {
+      sbStats.style.display='none';
+    }
+  }
   const tbSub=$('tbSub');if(tbSub){tbSub.style.display='block';tbSub.textContent=APP.gymProfile?.name||p.gymName||'';}
   APP.view=r==='coach'?'coachDash':r==='director'?'dirHome':'parentHome';
   APP.attDay=new Date().toLocaleDateString('en-US',{weekday:'long'});
@@ -187,9 +215,9 @@ function initApp(){
 }
 
 const NAV={
-  coach:[{s:'Class Tools'},{i:'🏠',l:'Dashboard',v:'coachDash'},{i:'✅',l:'Attendance',v:'coachAtt'},{i:'🥋',l:'Skill Tracker',v:'coachSkills'},{i:'📝',l:'Notes',v:'coachNotes'},{i:'📋',l:'Lesson Plans',v:'lessons'},{s:'My KINETIC'},{i:'📚',l:'Skill Library',v:'library'},{i:'📅',l:'My Schedule',v:'coachSched'},{i:'💬',l:'Messages',v:'coachMsgs'},{i:'👤',l:'My Profile',v:'coachProfile'}],
-  director:[{s:'Operations'},{i:'🏠',l:'Overview',v:'dirHome'},{i:'👧',l:'Athletes',v:'dirAthletes'},{i:'🧑‍🏫',l:'Coaches',v:'dirCoaches'},{i:'📅',l:'Schedule',v:'dirSched'},{i:'📋',l:'Attendance',v:'dirAttendance'},{i:'💬',l:'Messages',v:'dirMsgs'},{i:'🔄',l:'Sub Requests',v:'dirSubs'},{s:'Admin'},{i:'💰',l:'Tuition',v:'dirBilling'},{i:'⏱️',l:'Timecards',v:'dirTimecards'},{i:'🚑',l:'Injury Log',v:'dirInjuries'},{s:'Content'},{i:'📄',l:'Documents',v:'dirDocuments'},{i:'🎥',l:'Routines',v:'dirRoutines'},{i:'📚',l:'Skill Library',v:'library'}],
-  parent:[{s:'My Athletes'},{i:'🏠',l:'Dashboard',v:'parentHome'},{i:'📈',l:'Skills',v:'parentSkills'},{i:'💳',l:'Tuition',v:'parentTuition'},{i:'💬',l:'Messages',v:'parentMsgs'},{i:'📄',l:'Documents',v:'parentDocuments'}],
+  coach:[{s:'Class Tools'},{i:'🏠',l:'Dashboard',v:'coachDash'},{i:'✅',l:'Attendance',v:'coachAtt'},{i:'🥋',l:'Skill Tracker',v:'coachSkills'},{i:'📝',l:'Notes',v:'coachNotes'},{i:'📋',l:'Lesson Plans',v:'lessons'},{s:'My KINETIC'},{i:'📚',l:'Skill Library',v:'library'},{i:'📅',l:'My Schedule',v:'coachSched'},{i:'💬',l:'Messages',v:'coachMsgs'},{i:'📄',l:'Documents',v:'coachDocuments'},{i:'🎥',l:'Routines',v:'coachRoutines'},{i:'👤',l:'My Profile',v:'coachProfile'}],
+  director:[{s:'Today'},{i:'🏠',l:'Overview',v:'dirHome'},{i:'📋',l:'Attendance',v:'dirAttendance'},{i:'💬',l:'Messages',v:'dirMsgs'},{s:'Team'},{i:'👧',l:'Athletes',v:'dirAthletes'},{i:'🧑‍🏫',l:'Coaches',v:'dirCoaches'},{i:'📅',l:'Schedule',v:'dirSched'},{i:'🔄',l:'Sub Requests',v:'dirSubs'},{s:'Admin'},{i:'💰',l:'Tuition',v:'dirBilling'},{i:'⏱️',l:'Timecards',v:'dirTimecards'},{i:'🚑',l:'Injury Log',v:'dirInjuries'},{i:'📊',l:'Analytics',v:'dirAnalytics'},{s:'Content'},{i:'📄',l:'Documents',v:'dirDocuments'},{i:'🎥',l:'Routines',v:'dirRoutines'},{i:'📚',l:'Skill Library',v:'library'}],
+  parent:[{s:'My Athletes'},{i:'🏠',l:'Dashboard',v:'parentHome'},{i:'📈',l:'Skills',v:'parentSkills'},{i:'💳',l:'Tuition',v:'parentTuition'},{i:'💬',l:'Messages',v:'parentMsgs'},{i:'📄',l:'Documents',v:'parentDocuments'},{i:'🎥',l:'Routines',v:'parentRoutines'}],
 };
 
 function renderNav(){
@@ -222,7 +250,7 @@ async function loadAI(){
 function render(){
   const c=$('mc');if(!c)return;
   const v=APP.view||'coachDash';
-  const views={coachDash,coachAtt,coachSkills,coachNotes,coachSched,coachMsgs,coachProfile,lessons:lessonPlans,library:()=>library(APP.libLevel||'all',APP.libEvent||'all'),dirHome,dirSched,dirAttendance,dirAthletes:()=>dirAthletes('active'),dirAthletes_arch:()=>dirAthletes('archived'),dirCoaches,dirTimecards,dirMsgs,dirBilling,dirSubs,dirInjuries,dirDocuments,dirRoutines,parentHome,parentSkills,parentTuition,parentMsgs,parentDocuments};
+  const views={coachDash,coachAtt,coachSkills,coachNotes,coachSched,coachMsgs,coachProfile,coachDocuments,coachRoutines,lessons:lessonPlans,library:()=>library(APP.libLevel||'all',APP.libEvent||'all'),dirHome,dirSched,dirAttendance,dirAthletes:()=>dirAthletes('active'),dirAthletes_arch:()=>dirAthletes('archived'),dirCoaches,dirTimecards,dirMsgs,dirBilling,dirSubs,dirInjuries,dirDocuments,dirRoutines,dirAnalytics,parentHome,parentSkills,parentTuition,parentMsgs,parentDocuments,parentRoutines};
   if(v.startsWith('skill_')){c.innerHTML=skillDetail(v.replace('skill_',''));return;}
   try{c.innerHTML=(views[v]?views[v]():`<div class="empty-state"><div class="es-icon">🔒</div><h3>Coming Soon</h3><p>This feature is on the roadmap for KINETIC 2.0.</p></div>`);}
   catch(err){console.error('render:',v,err);c.innerHTML=`<div class="empty-state"><div class="es-icon">⚠️</div><h3>Something went wrong</h3><p style="font-size:12px;">${err.message}</p><button class="btn primary" style="margin-top:16px;" onclick="K.nav('${APP.role==='director'?'dirHome':APP.role==='coach'?'coachDash':'parentHome'}')">← Go Home</button></div>`;}
@@ -294,7 +322,11 @@ startSkills(classId){APP.activeSkillClass=classId;const cls=APP.allClasses.find(
 async loadNotesHistory(date,classId){try{const s=await getDoc(doc(db,'notes/'+APP.user.uid+'_'+date+'_'+classId));if(s.exists()){const d=s.data();APP.classNotes=d.classNotes||'';APP.issueNotes=d.issueNotes||'';APP.privateNotes=d.privateNotes||{};}else{APP.classNotes='No notes for this date.';APP.issueNotes='';APP.privateNotes={};}render();}catch(e){render();}},
 clockIn(){const my=APP.allClasses.filter(c=>(c.coaches||[]).includes(APP.user?.uid)||c.coachId===APP.user?.uid);if(my.length===0){K.doClockIn(null);return;}if(my.length===1){K.doClockIn(my[0]);return;}$('mc').innerHTML=`<h2 style="font-family:'Montserrat',sans-serif;font-weight:900;font-size:22px;margin-bottom:8px;">Which class are you teaching?</h2><p style="font-size:14px;color:var(--t2);margin-bottom:20px;">You can switch classes after clocking in.</p>${my.map(c=>`<div onclick="K.clockInClass('${c.id}')" style="background:var(--panel);border:2px solid var(--bdr);border-radius:12px;padding:18px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--bdr)'"><div style="font-size:28px;">🥋</div><div style="flex:1;"><div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;">${c.name}</div><div style="font-size:12px;color:var(--t2);margin-top:3px;">${c.day} · ${c.time} · ${c.level}</div></div><span style="color:var(--gold);font-size:20px;">→</span></div>`).join('')}`;},
 clockInClass(id){K.doClockIn(APP.allClasses.find(c=>c.id===id)||null);},
-async doClockIn(cls){APP.clockedIn=true;APP.clockInTime=new Date();APP.clockSessionId='tc_'+APP.user.uid+'_'+Date.now();APP.selectedClass=cls?{...cls,athleteObjects:APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id))}:{name:'General',athleteObjects:[]};APP.attState={};APP.attSavedClasses={};APP.skillState={};APP.attSaved=false;APP.notesSaved=false;APP.classNotes='';APP.issueNotes='';APP.sessionState={};if(cls){APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).forEach((_,i)=>{if(!APP.attState[cls.id])APP.attState[cls.id]={};APP.attState[cls.id][i]='present';});}try{await setDoc(doc(db,'timecards',APP.clockSessionId),{coachId:APP.user.uid,coachName:APP.profile?.name||'Coach',gymId:APP.gymId||null,classId:cls?.id||null,className:cls?.name||'General',date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),clockIn:APP.clockInTime.toISOString(),status:'active'});}catch(e){}APP.activeSkillClass=cls?.id||null;APP.view='coachDash';renderNav();render();toast(`✓ Clocked In${cls?` — ${cls.name}`:''}`);},
+async doClockIn(cls){
+  // Block double clock-in — one session per user
+  const existing=(APP.myTimecards||[]).find(t=>t.status==='active'&&t.coachId===APP.user?.uid);
+  if(existing){toast('You are already clocked in. Clock out first.','warn');APP.view='coachDash';render();return;}
+  APP.clockedIn=true;APP.clockInTime=new Date();APP.clockSessionId='tc_'+APP.user.uid+'_'+Date.now();APP.selectedClass=cls?{...cls,athleteObjects:APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id))}:{name:'General',athleteObjects:[]};APP.attState={};APP.attSavedClasses={};APP.skillState={};APP.attSaved=false;APP.notesSaved=false;APP.classNotes='';APP.issueNotes='';APP.sessionState={};if(cls){APP.allAthletes.filter(a=>(cls.athletes||[]).includes(a.id)).forEach((_,i)=>{if(!APP.attState[cls.id])APP.attState[cls.id]={};APP.attState[cls.id][i]='present';});}try{await setDoc(doc(db,'timecards',APP.clockSessionId),{coachId:APP.user.uid,coachName:APP.profile?.name||'Coach',gymId:APP.gymId||null,classId:cls?.id||null,className:cls?.name||'General',date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),clockIn:APP.clockInTime.toISOString(),status:'active'});}catch(e){}APP.activeSkillClass=cls?.id||null;APP.view='coachDash';renderNav();render();toast(`✓ Clocked In${cls?` — ${cls.name}`:''}`);},
 clockOut(){if(!APP.attSaved){toast('Save attendance first','warn');return;}K.openModal('coModal');['coS1','coS2','coS3','coS4'].forEach((id,i)=>{const e=$(id);if(e)e.style.display=i===0?'block':'none';});},
 coTime(yes){$('coS1').style.display='none';$(yes?'coS3':'coS2').style.display='block';},
 async coNote(){const n=val('coNote');if(n&&APP.clockSessionId)try{await setDoc(doc(db,'timecards',APP.clockSessionId),{directorNote:n},{merge:true});}catch(e){}$('coS2').style.display='none';$('coS3').style.display='block';},

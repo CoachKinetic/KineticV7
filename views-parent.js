@@ -150,3 +150,14 @@ function msgList(msgs,uid,role){
     ${isUnread?`<div style="width:8px;height:8px;border-radius:50%;background:var(--gold);flex-shrink:0;margin-top:4px;"></div>`:''}
   </div>`;}).join('')}</div>`;
 }
+
+export function parentRoutines(){
+  const routines=(APP.allRoutines||[]).sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  return`<div class="sec-hdr"><h3>Routines & Media</h3></div>
+  ${routines.length===0?`<div class="empty-state"><div class="es-icon">🎬</div><h3>No routines yet</h3><p>Your gym will share routine videos and floor music here.</p></div>`
+  :`<div style="display:flex;flex-direction:column;gap:8px;">${routines.map(r=>`<div style="background:var(--panel);border:1px solid var(--bdr);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+    <div style="width:48px;height:48px;border-radius:12px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">🎬</div>
+    <div style="flex:1;"><div style="font-size:15px;font-weight:700;">${r.name||'Routine'}</div><div style="font-size:12px;color:var(--t2);margin-top:2px;">${r.className||'All Classes'}${r.level?' · '+r.level:''}</div>${r.notes?`<div style="font-size:12px;color:var(--t3);margin-top:3px;">${r.notes}</div>`:''}</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">${r.videoUrl?`<a href="${r.videoUrl}" target="_blank" class="btn primary" style="font-size:10px;padding:6px 12px;white-space:nowrap;">▶ Watch</a>`:''} ${r.audioUrl?`<a href="${r.audioUrl}" target="_blank" class="btn" style="font-size:10px;padding:6px 12px;white-space:nowrap;">♪ Audio</a>`:''}</div>
+  </div>`).join('')}</div>`}`;
+}
